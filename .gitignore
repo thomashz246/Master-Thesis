@@ -1,0 +1,9 @@
+*.pkl
+*.h5
+*.pt
+__pycache__/
+models/
+logs/
+*.log
+.env
+*.ipynb_checkpoints/
