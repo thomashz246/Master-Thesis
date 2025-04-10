@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --partition=cpu        # Switch to CPU partition since you force CPU mode anyway
-#SBATCH --gpus=0               # Remove GPU request since you don't need it
+#SBATCH --partition=rome        # Use 'rome' partition which has available nodes
+#SBATCH --gpus=0               # No GPU needed
 #SBATCH --job-name=PriceSimJob # More descriptive job name
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4      # Reduced from 9 since your sim is single-threaded
@@ -15,6 +15,9 @@ module load Anaconda3/2023.07-2
 
 # Activate your conda environment
 source activate myenv
+
+# Install required packages
+pip install --user wrapt numpy h5py tensorboard keras-preprocessing requests
 
 # Go to the directory where simulate.py is located (fixed path)
 cd $HOME/thesis/Online\ Retail/

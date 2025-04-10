@@ -1,6 +1,7 @@
 import os
 import sys
 import tensorflow as tf
+from evaluation.eval_metrics import *
 
 # Redirect stderr to nowhere (suppresses all stderr warnings)
 old_stderr = sys.stderr
@@ -102,7 +103,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
         
         try:
             for week in range(weeks):
-                print(f"Week {week+1}/{weeks}", end='\r')
+                print(f"Episode {episode+1}/{episodes}, Week {week+1}/{weeks}", end='\r')
                 # Store previous week prices for comparison
                 previous_prices = {}
                 for agent in agents:
@@ -250,19 +251,57 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
     plt.grid(True, alpha=0.3)
     plt.savefig("learning_progress.png")
 
-    return episode_returns
+    # At the end of simulation
+    # Create final metrics for evaluation
+    final_metrics = {}
+    try:
+        nash_scores, nash_overall = nash_equilibrium_proximity(price_df)
+        
+        final_metrics = {
+            'price_stability': calculate_price_stability(price_df, episode),
+            'nash_equilibrium': nash_scores,
+            'nash_overall': nash_overall,
+            'optimality_gap': revenue_optimality_gap(episode_returns),
+            'price_revenue_elasticity': price_revenue_elasticity(price_df, episode_returns),
+            'global_vs_individual': global_vs_individual_optimality(price_df, episode_returns),
+            'social_welfare': social_welfare_metric(price_df, episode_returns)
+        }
+        
+        # Print or save metrics
+        print("\nConvergence & Optimality Metrics:")
+        for metric_name, values in final_metrics.items():
+            if isinstance(values, dict):
+                print(f"\n{metric_name.replace('_', ' ').title()}:")
+                for k, v in values.items():
+                    print(f"  {k}: {v:.4f}")
+            else:
+                print(f"{metric_name.replace('_', ' ').title()}: {values:.4f}")
+                
+        # Save metrics to CSV
+        metrics_df = pd.DataFrame()
+        for metric_name, values in final_metrics.items():
+            if isinstance(values, dict):
+                for k, v in values.items():
+                    metrics_df.loc[metric_name, k] = v
+            else:
+                metrics_df.loc['overall', metric_name] = values
+        
+        metrics_df.to_csv(f"logs/optimization_metrics_ep{episode+1}.csv")
+    except Exception as e:
+        print(f"\nError calculating evaluation metrics: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return episode_returns, final_metrics
 
 if __name__ == "__main__":
     # Choose agent type: False for Q-Learning, True for MADDPG
     use_maddpg = True
-    returns = run_simulation(weeks=104, episodes=50, num_agents=4, use_maddpg=use_maddpg)
+    episode_returns, metrics = run_simulation(weeks=104, episodes=1, num_agents=4, use_maddpg=use_maddpg)
     print("\nSimulation complete!")
     print("\nTotal revenue by episode:")
-    for episode in range(len(returns['Agent1'])):
+    for episode in range(len(episode_returns['Agent1'])):
         print(f"Episode {episode+1}: ", end="")
-        for agent_id in returns.keys():
-            print(f"{agent_id}: ${returns[agent_id][episode]:.2f} ", end="")
+        for agent_id in episode_returns.keys():
+            print(f"{agent_id}: ${episode_returns[agent_id][episode]:.2f} ", end="")
         print()
-
-
-# This is just a github test comment
