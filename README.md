@@ -7,28 +7,7 @@ This project implements a multi-agent reinforcement learning framework for dynam
 The simulation uses two types of reinforcement learning algorithms:
 
 ### MADDPG (Multi-Agent Deep Deterministic Policy Gradient): A deep reinforcement learning approach using actor-critic networks
-Q-Learning: A more traditional reinforcement learning method using state-action value tables
-Project Structure
-Online Retail/
-├── agents/                    # Agent implementations
-│   ├── learning_agent.py      # Rule-based competitive learning agent
-│   ├── maddpg_agent.py        # MADDPG implementation
-│   ├── rl_agent.py            # Q-learning implementation  
-├── env/                       # Environment classes
-│   ├── market_env.py          # Market simulation environment
-│   ├── pricing_agent.py       # Base pricing agent class
-│   ├── product.py             # Product class definition
-├── models/                    # Trained demand models
-│   └── lgbm_model.pkl         # LightGBM demand prediction model
-├── data/                      # Dataset files
-│   ├── online_retail_II.csv             # Original dataset
-│   └── engineered_weekly_demand_with_lags.csv  # Processed dataset with features
-├── scripts/                   # Data processing scripts
-│   └── product_selection.py   # Product selection and analysis
-├── maddpg_models/             # Saved model checkpoints
-├── simulate.py                # Main simulation script
-├── simulate.job               # Batch job submission script
-├── README.md                  # Project documentation
+### Q-Learning: A more traditional reinforcement learning method using state-action value tables
 
 ### Key Features
 - Multi-Agent Environment: Simulates multiple retail agents competing in the same market
