@@ -35,29 +35,37 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
         
         # Create multiple product portfolios
         product_portfolios = [
-            # Agent 1 
+            # Agent 1 – Premium & Midrange Focus
             [
-                Product("PremiumA1", 15.0, category_cluster=1),
-                Product("PremiumA2", 25.0, category_cluster=1),
-                Product("PremiumA3", 35.0, category_cluster=2)
+                Product("PremiumA1", 50.0, category_cluster=1),
+                Product("PremiumA2", 32.0, category_cluster=2),
+                Product("PremiumA3", 28.0, category_cluster=3),
+                Product("PremiumA4", 40.0, category_cluster=5),
+                Product("LuxuryA5", 55.4, category_cluster=10)
             ],
-            # Agent 2
+            # Agent 2 – Budget & Midrange Focus
             [
-                Product("BudgetB1", 10.0, category_cluster=1),
-                Product("BudgetB2", 20.0, category_cluster=1),
-                Product("BudgetB3", 30.0, category_cluster=2)
+                Product("BudgetB1", 12.0, category_cluster=1),
+                Product("BudgetB2", 20.0, category_cluster=4),
+                Product("BudgetB3", 30.0, category_cluster=6),
+                Product("MidB4", 45.0, category_cluster=8),
+                Product("PremiumB5", 65.0, category_cluster=12)
             ],
-            # Agent 3
+            # Agent 3 – Mixed Strategy, Overlapping with A2 & B4
             [
-                Product("MidC1", 10.0, category_cluster=1),
-                Product("MidC2", 20.0, category_cluster=1),
-                Product("MidC4", 30.0, category_cluster=2)
+                Product("MidC1", 13.0, category_cluster=2),
+                Product("MidC2", 23.0, category_cluster=4),
+                Product("MidC3", 33.0, category_cluster=6),
+                Product("PremiumC4", 48.0, category_cluster=8),
+                Product("LuxuryC5", 90.0, category_cluster=15)
             ],
-            # Agent 4
+            # Agent 4 – Aggressive Undercutter with Wide Spread
             [
-                Product("PremiumA1", 8.0, category_cluster=1),
-                Product("PremiumA2", 18.0, category_cluster=1),
-                Product("PremiumA3", 28.0, category_cluster=2)
+                Product("PremiumA1", 10.0, category_cluster=1),  # competing directly
+                Product("PremiumA2", 18.0, category_cluster=2),
+                Product("BudgetD3", 25.0, category_cluster=5),
+                Product("PremiumD4", 55.0, category_cluster=10),
+                Product("LuxuryD5", 99.0, category_cluster=20)
             ]
         ]
         
@@ -297,7 +305,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
 if __name__ == "__main__":
     # Choose agent type: False for Q-Learning, True for MADDPG
     use_maddpg = True
-    episode_returns, metrics = run_simulation(weeks=104, episodes=1, num_agents=4, use_maddpg=use_maddpg)
+    episode_returns, metrics = run_simulation(weeks=104, episodes=35, num_agents=4, use_maddpg=use_maddpg)
     print("\nSimulation complete!")
     print("\nTotal revenue by episode:")
     for episode in range(len(episode_returns['Agent1'])):

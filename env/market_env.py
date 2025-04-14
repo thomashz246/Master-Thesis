@@ -65,31 +65,67 @@ class MarketEnv:
             if feature not in df.columns:
                 raise ValueError(f"Missing required feature: {feature}")
         
-        # Predict base demand with the ML model
-        log_quantity = self.demand_model.predict(df[required_features])
-        base_quantity = np.expm1(log_quantity)[0]
+        # Add the same engineered features as in demand.py
+        df['Price_log'] = np.log1p(df['Price'])
+        df['Price_squared'] = df['Price'] ** 2
         
-        # Debugging output
-        # print(f"Base quantity from model: {base_quantity}, features: {features_dict}")
+        # Seasonal decomposition
+        df['SinWeek'] = np.sin(2 * np.pi * df['Week'] / 52)
+        df['CosWeek'] = np.cos(2 * np.pi * df['Week'] / 52)
         
-        # Apply competitive price effects
+        # Monthly seasonality approximation
+        df['MonthApprox'] = ((df['Week'] - 1) // 4) + 1
+        df['SinMonth'] = np.sin(2 * np.pi * df['MonthApprox'] / 12)
+        df['CosMonth'] = np.cos(2 * np.pi * df['MonthApprox'] / 12)
+        
+        # Interaction terms
+        df['Price_Holiday'] = df['Price'] * df['IsHolidaySeason']
+        df['Price_Category'] = df['Price'] * df['CategoryCluster']
+        
+        # Trend indicators - use existing data if available
+        df['Trend'] = df['Quantity_roll_mean_4'] - df['Quantity_roll_mean_2']
+        df['Acceleration'] = df['Quantity_lag_1'] - df['Quantity_roll_mean_2']
+        
+        # Volatility - simplified version since we don't have category-wide data
+        df['Volatility'] = 0  # Default to 0 volatility
+        
+        # Price position metrics - use market data if available
+        df['Price_vs_Category_Avg'] = 1.0  # Default to neutral position
+        
+        # If we have competing products, calculate a better price ratio
+        if competing_products and len(competing_products) > 0:
+            avg_category_price = sum(p['price'] for p in competing_products) / len(competing_products)
+            if avg_category_price > 0:
+                df['Price_vs_Category_Avg'] = df['Price'] / avg_category_price
+        
+        # Extend required features with new engineered features
+        extended_features = required_features + [
+            'Price_log', 'Price_squared', 'SinWeek', 'CosWeek', 
+            'SinMonth', 'CosMonth', 'Price_Holiday', 'Price_Category',
+            'Trend', 'Acceleration', 'Volatility', 'Price_vs_Category_Avg'
+        ]
+        
+        # Predict with the ML model using all features
+        log_quantity = self.demand_model.predict(df[extended_features])[0]
+        base_quantity = np.expm1(log_quantity)
+        
+        # Apply competitive effects (optional, your model may already handle this)
         if competing_products:
-            # Calculate average competitor price (weighted by demand)
-            total_weight = sum(p['last_demand'] for p in competing_products) or 1  # Avoid division by zero
+            # Calculate average competitor price
+            total_weight = sum(p['last_demand'] for p in competing_products) or 1
             avg_competitor_price = sum(p['price'] * p['last_demand'] for p in competing_products) / total_weight
             
             # Calculate price ratio (our price / competitor price)
             if avg_competitor_price > 0:
                 price_ratio = features_dict['Price'] / avg_competitor_price
                 
-                # Price elasticity effect - when our price is lower, demand increases
+                # Apply moderate competition effects (reduced from original implementation)
+                # since the model already learned these patterns
                 if price_ratio < 1.0:  # Our price is lower
-                    # Increase demand when our price is lower (up to 2x boost at significant discount)
-                    boost_factor = 1.0 + max(0, (1.0 - price_ratio) * 2)  # Linear boost up to 2x
+                    boost_factor = 1.0 + max(0, (1.0 - price_ratio) * 0.5)
                     base_quantity *= boost_factor
                 else:  # Our price is higher
-                    # Decrease demand when our price is higher (down to 0.3x at significant premium)
-                    reduction_factor = max(0.3, 1.0 - min(0.7, (price_ratio - 1.0)))  # Linear reduction down to 0.3x
+                    reduction_factor = max(0.7, 1.0 - min(0.3, (price_ratio - 1.0)))
                     base_quantity *= reduction_factor
         
         # Ensure quantity is non-negative integer

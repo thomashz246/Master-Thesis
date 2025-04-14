@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 from lightgbm import early_stopping, log_evaluation
@@ -12,22 +12,69 @@ import math
 
 # Load engineered data with clusters
 print("\U0001F4C2 Loading engineered dataset...")
-df = pd.read_csv("engineered_weekly_demand_with_lags.csv")
-print(f"✅ Dataset loaded with {len(df)} rows")
+df = pd.read_csv("../data/engineered_weekly_demand_with_lags.csv")
+print(f"Dataset loaded with {len(df)} rows")
+
+# Handle outliers
+def remove_outliers(df, col='Quantity', threshold=3):
+    z_scores = np.abs((df[col] - df[col].mean()) / df[col].std())
+    return df[z_scores < threshold]
+
+# Handle missing values more intelligently
+def handle_missing(df):
+    for col in df.columns:
+        if df[col].isnull().sum() > 0:
+            if col.startswith('Quantity_lag') or col.startswith('Quantity_roll'):
+                # Use appropriate filling for time-series features
+                df[col] = df[col].fillna(df['Quantity'].mean())
+            else:
+                df[col] = df[col].fillna(df[col].median())
+    return df
+
+# Apply preprocessing
+df_clean = remove_outliers(df)
+df_clean = handle_missing(df_clean)
 
 # Log-transform the target to reduce skew
 print("🔄 Applying log-transform to Quantity...")
-df['LogQuantity'] = np.log1p(df['Quantity'])
+df_clean['LogQuantity'] = np.log1p(df_clean['Quantity'])
 
 # Encode categorical variables
 for col in ['StockCode']:
-    df[col] = df[col].astype('category')
+    df_clean[col] = df_clean[col].astype('category')
 
 # Print all columns
 print("📋 Columns in dataset:"
-      f"\n{df.columns.tolist()}")
+      f"\n{df_clean.columns.tolist()}")
 
-# Final feature set
+print("🛠️ Engineering additional features...")
+
+# Price-related features
+df_clean['Price_log'] = np.log1p(df_clean['Price'])
+df_clean['Price_squared'] = df_clean['Price'] ** 2
+
+# Seasonal decomposition
+df_clean['SinWeek'] = np.sin(2 * np.pi * df_clean['Week'] / 52)
+df_clean['CosWeek'] = np.cos(2 * np.pi * df_clean['Week'] / 52)
+
+# Monthly seasonality approximation
+df_clean['MonthApprox'] = ((df_clean['Week'] - 1) // 4) + 1
+df_clean['SinMonth'] = np.sin(2 * np.pi * df_clean['MonthApprox'] / 12)
+df_clean['CosMonth'] = np.cos(2 * np.pi * df_clean['MonthApprox'] / 12)
+
+# Interaction terms
+df_clean['Price_Holiday'] = df_clean['Price'] * df_clean['IsHolidaySeason']
+df_clean['Price_Category'] = df_clean['Price'] * df_clean['CategoryCluster']
+
+# Trend indicators
+df_clean['Trend'] = df_clean['Quantity_roll_mean_4'] - df_clean['Quantity_roll_mean_2']
+df_clean['Acceleration'] = df_clean['Quantity_lag_1'] - df_clean['Quantity_roll_mean_2']
+df_clean['Volatility'] = df_clean.groupby(['CategoryCluster'])['Quantity'].transform(lambda x: x.rolling(4).std())
+df_clean['Volatility'].fillna(df_clean['Volatility'].median(), inplace=True)
+
+# Price position metrics
+df_clean['Price_vs_Category_Avg'] = df_clean['Price'] / df_clean.groupby('CategoryCluster')['Price'].transform('mean')
+
 feature_cols = ['Price', 
                 'IsWeekend', 
                 'Year', 
@@ -38,8 +85,21 @@ feature_cols = ['Price',
                 'Quantity_lag_1', 
                 'Quantity_roll_mean_2', 
                 'Quantity_roll_mean_4']
-X = df[feature_cols]
-y = df['LogQuantity']
+
+# Enhance the feature columns list
+extended_features = feature_cols + [
+    'Price_log', 'Price_squared', 
+    'SinWeek', 'CosWeek', 'SinMonth', 'CosMonth',
+    'Price_Holiday', 'Price_Category', 
+    'Trend', 'Acceleration', 'Volatility',
+    'Price_vs_Category_Avg'
+]
+
+print(f"✅ Added {len(extended_features) - len(feature_cols)} new features")
+print(f"📋 New feature set: {extended_features}")
+
+X = df_clean[extended_features]
+y = df_clean['LogQuantity']
 
 print(f"🧪 Using full dataset of {len(X)} samples")
 
@@ -77,7 +137,7 @@ end_time = time.time()
 print(f"✅ Training finished in {end_time - start_time:.2f} seconds")
 
 # Save model
-joblib.dump(model, 'lgbm_model.pkl')
+joblib.dump(model, '../models/lgbm_model.pkl')
 print("📂 Model saved to lgbm_model.pkl")
 
 # Evaluate model
@@ -171,28 +231,16 @@ print("📁 Smoothed price sensitivity analysis saved to price_sensitivity_smoot
 
 # Predicted quantity by week
 print("\n🕰️ Plotting predicted weekly quantity trend...")
-df['PredictedQuantity'] = np.expm1(model.predict(X))
-weekly_avg = df.groupby(['Year', 'Week'])['PredictedQuantity'].mean().reset_index()
+df_clean['PredictedQuantity'] = np.expm1(model.predict(X))
+weekly_avg = df_clean.groupby(['Year', 'Week'])['PredictedQuantity'].mean().reset_index()
 weekly_avg['YearWeek'] = weekly_avg['Year'].astype(str) + "-W" + weekly_avg['Week'].astype(str)
 weekly_avg = weekly_avg.sort_values(['Year', 'Week'])
 
-# plt.figure(figsize=(12, 6))
-# plt.plot(weekly_avg['YearWeek'], weekly_avg['PredictedQuantity'], marker='o')
-# plt.xticks(rotation=45)
-# plt.title("Predicted Weekly Demand Over Time")
-# plt.xlabel("Week")
-# plt.ylabel("Predicted Quantity")
-# plt.grid(True, alpha=0.3)
-# plt.tight_layout()
-# plt.savefig("predicted_demand_by_week.png")
-# print("📁 Weekly trend plot saved to predicted_demand_by_week.png")
+print("\n Summing predicted demand across weeks...")
+df_clean['Predicted_LogQuantity'] = model.predict(X)
+df_clean['Predicted_Quantity'] = np.expm1(df_clean['Predicted_LogQuantity'])
 
-# 📆 Predicted demand summed by week (across all years)
-print("\n📆 Summing predicted demand across weeks...")
-df['Predicted_LogQuantity'] = model.predict(X)
-df['Predicted_Quantity'] = np.expm1(df['Predicted_LogQuantity'])
-
-weekly_sum = df.groupby('Week')['Predicted_Quantity'].sum().reset_index()
+weekly_sum = df_clean.groupby('Week')['Predicted_Quantity'].sum().reset_index()
 
 plt.figure(figsize=(12, 6))
 plt.plot(weekly_sum['Week'], weekly_sum['Predicted_Quantity'], marker='o')

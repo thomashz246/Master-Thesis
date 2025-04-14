@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
-df = pd.read_csv('online_retail_II.csv', encoding='latin1')
+df = pd.read_csv('../data/online_retail_II.csv', encoding='latin1')
 
 # Filter for stockcodes that start with exactly 5 digits
 df = df[df['StockCode'].str.match(r'^\d{5}')]
