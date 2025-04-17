@@ -1,36 +1,43 @@
-# demand.py
+"""
+Gradient Boosting implementation for demand prediction in the Online Retail dataset.
+This implementation follows similar methodology as the LightGBM version.
+"""
+
 import pandas as pd
 import numpy as np
-import lightgbm as lgb
-from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
+from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.ensemble import GradientBoostingRegressor
 import matplotlib.pyplot as plt
-from lightgbm import early_stopping, log_evaluation
 import time
 import joblib
 import math
 import warnings
-from sklearn.model_selection import GridSearchCV
-from sklearn.pipeline import Pipeline
+import os
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 warnings.filterwarnings("ignore", category=FutureWarning)
-# Import necessary libraries
+
+# Create image directory
+os.makedirs("images", exist_ok=True)
+os.makedirs("product_elasticity", exist_ok=True)
 
 # Load engineered data with clusters
-print("\U0001F4C2 Loading engineered dataset...")
+print("📂 Loading engineered dataset...")
 df = pd.read_csv("../data/engineered_weekly_demand_with_lags.csv")
 print(f"Dataset loaded with {len(df)} rows")
 
 # Handle outliers
 def remove_outliers(df, col='Quantity', threshold=3):
+    """Remove outliers using z-score method."""
     z_scores = np.abs((df[col] - df[col].mean()) / df[col].std())
     return df[z_scores < threshold]
 
 # Handle missing values more intelligently
 def handle_missing(df):
+    """Handle missing values in a way appropriate for time series data."""
     for col in df.columns:
         if df[col].isnull().sum() > 0:
             if col.startswith('Quantity_lag') or col.startswith('Quantity_roll'):
-                # Use appropriate filling for time-series features
                 df[col] = df[col].fillna(df['Quantity'].mean())
             else:
                 df[col] = df[col].fillna(df[col].median())
@@ -54,10 +61,24 @@ print("📋 Columns in dataset:"
 
 print("🛠️ Engineering additional features...")
 
-# Add this function to your script
-def apply_feature_engineering(df):
+# Feature engineering function
+def apply_feature_engineering(df, train_only=None):
+    """
+    Apply feature engineering with optional prevention of data leakage.
+    
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        The data to transform
+    train_only : pandas DataFrame, optional
+        If provided, compute group statistics only from this data
+        and apply to df
+    """
     # Create explicit copy
     result = df.copy()
+    
+    # If train_only is provided, use it for group statistics
+    source_for_stats = train_only if train_only is not None else df
     
     # Apply all transformations using .loc
     result.loc[:, 'Price_log'] = np.log1p(result['Price'])
@@ -76,20 +97,57 @@ def apply_feature_engineering(df):
     result.loc[:, 'Trend'] = result['Quantity_roll_mean_4'] - result['Quantity_roll_mean_2']
     result.loc[:, 'Acceleration'] = result['Quantity_lag_1'] - result['Quantity_roll_mean_2']
     
-    # Group operations need special handling
-    volatility = result.groupby(['CategoryCluster'])['Quantity_lag_1'].transform(lambda x: x.rolling(4).std())
-    result.loc[:, 'Volatility'] = volatility
-    result.loc[:, 'Volatility'] = result['Volatility'].fillna(result['Volatility'].median())
+    # Group operations with data leakage prevention
+    # Calculate statistics from source_for_stats
+    cat_volatility = source_for_stats.groupby(['CategoryCluster'])['Quantity_lag_1'].rolling(4).std().reset_index(level=0, drop=True)
+    cat_price_avg = source_for_stats.groupby('CategoryCluster')['Price'].mean()
+    cat_week_year_price = source_for_stats.groupby(['CategoryCluster', 'Week', 'Year'])['Price'].mean()
     
-    price_vs_category = result['Price'] / result.groupby('CategoryCluster')['Price'].transform('mean')
-    result.loc[:, 'Price_vs_Category_Avg'] = price_vs_category
+    # Map these values to result
+    # For volatility, we'll use a different approach since it's more complex
+    if train_only is not None:
+        # Create mapping dictionary for category volatility
+        cat_vol_dict = {}
+        for cat in source_for_stats['CategoryCluster'].unique():
+            cat_vol_dict[cat] = source_for_stats[source_for_stats['CategoryCluster'] == cat]['Quantity_lag_1'].rolling(4).std().mean()
+        
+        # Apply mapping
+        result.loc[:, 'Volatility'] = result['CategoryCluster'].map(cat_vol_dict)
+        result.loc[:, 'Price_vs_Category_Avg'] = result['Price'] / result['CategoryCluster'].map(cat_price_avg)
+        
+        # For CategoryPrice_ratio we need to create a lookup function
+        def get_cat_week_year_price(row):
+            try:
+                return cat_week_year_price.loc[(row['CategoryCluster'], row['Week'], row['Year'])]
+            except KeyError:
+                # Fallback to category average if specific combination not found
+                try:
+                    return cat_price_avg[row['CategoryCluster']]
+                except KeyError:
+                    return result['Price'].mean()
+                
+        result.loc[:, 'CategoryPrice_ratio'] = result.apply(
+            lambda row: row['Price'] / get_cat_week_year_price(row), axis=1
+        )
+    else:
+        # Original code when using the whole dataset
+        volatility = result.groupby(['CategoryCluster'])['Quantity_lag_1'].transform(lambda x: x.rolling(4).std())
+        result.loc[:, 'Volatility'] = volatility
+        
+        price_vs_category = result['Price'] / result.groupby('CategoryCluster')['Price'].transform('mean')
+        result.loc[:, 'Price_vs_Category_Avg'] = price_vs_category
+        
+        result.loc[:, 'CategoryPrice_ratio'] = result['Price'] / result.groupby(
+            ['CategoryCluster', 'Week', 'Year'])['Price'].transform('mean')
+    
+    # Fill any NaN values
+    result['Volatility'] = result['Volatility'].fillna(result['Volatility'].median())
     
     return result
 
-# Then replace your feature engineering section with:
+# Apply feature engineering
 df_clean = apply_feature_engineering(df_clean)
 
-# Add these features before extended_features list
 # Calculate the absolute week number for each row (Year*52 + Week)
 df_clean['AbsoluteWeek'] = df_clean['Year']*52 + df_clean['Week']
 
@@ -119,12 +177,13 @@ for i in [8, 12]:
 df_clean['Price_Week_sin'] = df_clean['Price'] * df_clean['SinWeek']
 df_clean['Price_Week_cos'] = df_clean['Price'] * df_clean['CosWeek']
 
-# Price elasticity might vary by product popularity (now StockCode_popularity exists)
+# Price elasticity might vary by product popularity
 df_clean['Price_Popularity'] = df_clean['Price'] * np.log1p(df_clean['StockCode_popularity'])
 
-# Category-specific price effects
-df_clean['CategoryPrice_ratio'] = df_clean['Price'] / df_clean.groupby(
-    ['CategoryCluster', 'Week', 'Year'])['Price'].transform('mean')
+# Handle missing values after feature engineering
+for col in df_clean.columns:
+    if df_clean[col].isnull().sum() > 0:
+        df_clean[col] = df_clean[col].fillna(df_clean[col].median())
 
 feature_cols = ['Price', 
                 'IsWeekend', 
@@ -159,7 +218,7 @@ print(f"🧪 Using full dataset of {len(X)} samples")
 
 # Time series cross-validation
 print("\n🔄 Performing time series cross-validation...")
-n_splits = 15  # or 10 if you have many weeks
+n_splits = 8  # Same as in LightGBM implementation
 tscv = TimeSeriesSplit(n_splits=n_splits)
 
 rmse_scores = []
@@ -169,36 +228,50 @@ r2_scores = []
 for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
     print(f"\n🔁 Fold {fold + 1}/{n_splits}")
     
-    X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-    y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+    # Get the corresponding rows from the original dataframe
+    df_train = df_clean.iloc[train_idx]
+    df_val = df_clean.iloc[val_idx]
     
-    model = lgb.LGBMRegressor(
-    objective='regression',
-    boosting_type='gbdt',
-    n_estimators=2048,
-    learning_rate=0.03,
-    num_leaves=256,
-    max_bin=512,
-    min_data_in_leaf=20, 
-    n_jobs=4,
-    verbose=-1
+    # For training data
+    df_train_featured = apply_feature_engineering(df_train)
+    
+    # For validation data (using train data for group statistics)
+    df_val_featured = apply_feature_engineering(df_val, train_only=df_train)
+    
+    # Extract features and target from featured dataframes
+    X_train = df_train_featured[extended_features]
+    y_train = df_train_featured['LogQuantity']
+    X_val = df_val_featured[extended_features]
+    y_val = df_val_featured['LogQuantity']
+    
+    # Handle any remaining missing values
+    X_train = X_train.fillna(X_train.median())
+    X_val = X_val.fillna(X_val.median())
+    
+    # Train Gradient Boosting model
+    model = GradientBoostingRegressor(
+        n_estimators=500,
+        learning_rate=0.05,
+        max_depth=6,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        subsample=0.8,
+        random_state=42,
+        validation_fraction=0.1
     )
-
-    model.fit(
-    X_train, y_train,
-    eval_set=[(X_val, y_val)],
-    eval_metric='rmse',
-    callbacks=[early_stopping(stopping_rounds=100)]
-    )
-
+    
+    model.fit(X_train, y_train)
+    
+    # Make predictions
     y_val_pred_log = model.predict(X_val)
     y_val_pred = np.expm1(y_val_pred_log)
     y_val_true = np.expm1(y_val)
-
+    
+    # Calculate metrics
     rmse = math.sqrt(mean_squared_error(y_val_true, y_val_pred))
     mae = mean_absolute_error(y_val_true, y_val_pred)
     r2 = r2_score(y_val_true, y_val_pred)
-
+    
     print(f"📉 Fold RMSE: {rmse:.2f}, MAE: {mae:.2f}, R²: {r2:.2f}")
     
     rmse_scores.append(rmse)
@@ -232,134 +305,56 @@ plt.ylabel('R²')
 plt.title('R² by Fold')
 
 plt.tight_layout()
-plt.savefig("cv_results.png")
-print("📁 Cross-validation results saved to cv_results.png")
+plt.savefig("images/gradboost_cv_results.png")
+print("📁 Cross-validation results saved to gradboost_cv_results.png")
 
-# First, move the cache loading to be the first thing after cross-validation
-try:
-    # Check if cache exists
-    import os
-    if os.path.exists('../models/preprocessing_cache.pkl'):
-        print("Loading cached data and CV results...")
-        data_cache = joblib.load('../models/preprocessing_cache.pkl')
-        X = data_cache['X']
-        y = data_cache['y']
-        best_params = data_cache['best_params']
-        # Now you can continue with train/test split
-except:
-    print("No cache found, continuing with normal processing")
-    # Define best params here since they weren't loaded from cache
-    print("\n🔍 Using pre-defined hyperparameters...")
-    best_params = {
-        'learning_rate': 0.03,
-        'max_depth': 8,
-        'min_data_in_leaf': 30,
-        'num_leaves': 128,
-        'reg_alpha': 0.1,
-        'reg_lambda': 0.1
-    }
-
-# Later you could load this instead of rerunning everything
-try:
-    # Check if cache exists
-    import os
-    if os.path.exists('../models/preprocessing_cache.pkl'):
-        print("Loading cached data and CV results...")
-        data_cache = joblib.load('../models/preprocessing_cache.pkl')
-        X = data_cache['X']
-        y = data_cache['y']
-        best_params = data_cache['best_params']
-        # Now you can continue with train/test split
-except:
-    print("No cache found, continuing with normal processing")
-
-# Replace the current param_grid with this smaller version
-param_grid = {
-    'learning_rate': [0.03, 0.1],
-    'num_leaves': [64, 256],
-    'max_depth': [8, -1],
-    'min_data_in_leaf': [20, 50],
-    'reg_alpha': [0, 0.5],
-    'reg_lambda': [0, 0.5]
-}
-
-# Use a smaller subset for hyperparameter tuning (for speed)
-X_sample = X.sample(min(5000, len(X)))
-y_sample = y.loc[X_sample.index]
-
-# Import TimeoutError
-from concurrent.futures import TimeoutError
-
-# Modify your GridSearchCV with a timeout parameter
-from sklearn.model_selection import GridSearchCV
-
-print("\n🔍 Using pre-defined hyperparameters instead of grid search...")
+# Use predefined hyperparameters (similar approach to the LightGBM implementation)
+print("\n🔍 Using pre-defined hyperparameters...")
 best_params = {
-    'learning_rate': 0.03,
-    'max_depth': 8,
-    'min_data_in_leaf': 30,
-    'num_leaves': 128,
-    'reg_alpha': 0.1,
-    'reg_lambda': 0.1
+    'learning_rate': 0.05,
+    'max_depth': 6,
+    'min_samples_split': 10,
+    'min_samples_leaf': 5,
+    'subsample': 0.8
 }
 
-print("\n⏱️ Starting feature selection and final model training...")
-# Feature selection starts here
 print("\n🚀 Training final model on train/test split...")
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
+# Hold out the last 10% of weeks as test set
+df_clean = df_clean.sort_values(['Year', 'Week'])
+cutoff = int(len(df_clean) * 0.9)
+X_train, X_test = X.iloc[:cutoff], X.iloc[cutoff:]
+y_train, y_test = y.iloc[:cutoff], y.iloc[cutoff:]
 print(f"📚 Train: {len(X_train)}, Test: {len(X_test)}")
 
-# Just use all features if the specific feature selection is causing issues
-X_train_selected = X_train
-X_test_selected = X_test
-print(f"📋 Using all {X_train.shape[1]} features without selection")
+# Handle any remaining missing values
+X_train = X_train.fillna(X_train.median())
+X_test = X_test.fillna(X_test.median())
 
-print("✅ Feature selection completed")
-print("\n⏱️ Training final model...")
-start_time = time.time()
-# Optimize for speed in the final model (replace lines ~290-302)
-print("🚀 Training LightGBM model...")
-model = lgb.LGBMRegressor(
-    objective='regression',
-    boosting_type='gbdt',
-    n_estimators=2000,
+print("🚀 Training Gradient Boosting model...")
+model = GradientBoostingRegressor(
+    n_estimators=2048,
     learning_rate=best_params['learning_rate'],
-    num_leaves=best_params['num_leaves'],
     max_depth=best_params['max_depth'],
-    min_data_in_leaf=best_params['min_data_in_leaf'],
-    reg_alpha=best_params['reg_alpha'],
-    reg_lambda=best_params['reg_lambda'],
-    n_jobs=4,
-    verbose=-1,
-    # Speed optimizations
-    subsample=0.8,
-    feature_fraction=0.8,
-    force_row_wise=True
+    min_samples_split=best_params['min_samples_split'],
+    min_samples_leaf=best_params['min_samples_leaf'],
+    subsample=best_params['subsample'],
+    random_state=42,
+    verbose=1
 )
 
 start_time = time.time()
-
-model.fit(
-    X_train_selected, y_train,
-    eval_set=[(X_test_selected, y_test)],
-    eval_metric='rmse',
-    callbacks=[
-        early_stopping(stopping_rounds=100),
-        log_evaluation(period=10)
-    ]
-)
-
+model.fit(X_train, y_train)
 end_time = time.time()
 print(f"✅ Training finished in {end_time - start_time:.2f} seconds")
 
 # Save model
-joblib.dump(model, '../models/lgbm_model.pkl')
-print("📂 Model saved to lgbm_model.pkl")
+joblib.dump(model, '../models/gradboost_model.pkl')
+print("📂 Model saved to gradboost_model.pkl")
 
 # Evaluate model
 print("📈 Evaluating model...")
-y_pred_log = model.predict(X_test_selected)
-y_pred = np.expm1(y_pred_log)  # inverse transform
+y_pred_log = model.predict(X_test)
+y_pred = np.expm1(y_pred_log)
 y_test_exp = np.expm1(y_test)
 
 rmse = math.sqrt(mean_squared_error(y_test_exp, y_pred))
@@ -373,18 +368,18 @@ print(f"🌟 R²: {r2:.2f}")
 # Plot feature importances
 print("📊 Plotting feature importances...")
 importances = model.feature_importances_
-features = X_train_selected.columns
+features = X_train.columns
 indices = np.argsort(importances)
 
 plt.figure(figsize=(10, 6))
 plt.barh(range(len(indices)), importances[indices], align="center")
 plt.yticks(range(len(indices)), [features[i] for i in indices])
-plt.title("Feature Importances (Log Demand)")
+plt.title("Gradient Boosting Feature Importances")
 plt.tight_layout()
-plt.savefig("feature_importances_log.png")
-print("📁 Feature importances saved to feature_importances_log.png")
+plt.savefig("images/gradboost_feature_importances.png")
+print("📁 Feature importances saved to gradboost_feature_importances.png")
 
-# Add this code after the feature importance plot (around line 395)
+# Plot actual vs predicted
 print("📊 Plotting actual vs. predicted quantities...")
 
 # Create a comparison dataframe
@@ -411,7 +406,7 @@ plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Predictio
 # Labels and title
 plt.xlabel('Actual Quantity')
 plt.ylabel('Predicted Quantity')
-plt.title(f'Actual vs. Predicted Quantities (R² = {r2:.2f})')
+plt.title(f'Gradient Boosting: Actual vs. Predicted Quantities (R² = {r2:.2f})')
 plt.legend()
 plt.grid(True, alpha=0.3)
 
@@ -421,7 +416,11 @@ plt.annotate(f'RMSE: {rmse:.2f}\nMAE: {mae:.2f}\nR²: {r2:.2f}',
              bbox=dict(boxstyle="round,pad=0.5", fc="white", alpha=0.8),
              verticalalignment='top')
 
-# Add a second plot showing residuals
+plt.tight_layout()
+plt.savefig("images/gradboost_actual_vs_predicted.png")
+print("📁 Actual vs. predicted plot saved to gradboost_actual_vs_predicted.png")
+
+# Plot residuals
 plt.figure(figsize=(12, 6))
 comparison_df['Residuals'] = comparison_df['Actual'] - comparison_df['Predicted']
 
@@ -431,11 +430,10 @@ plt.scatter(comparison_df['Actual'], comparison_df['Residuals'],
 plt.axhline(y=0, color='r', linestyle='-')
 plt.xlabel('Actual Quantity')
 plt.ylabel('Residuals (Actual - Predicted)')
-plt.title('Residual Plot')
+plt.title('Gradient Boosting: Residual Plot')
 plt.grid(True, alpha=0.3)
 
 # Add a histogram of residuals as an inset
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 axins = inset_axes(plt.gca(), width="30%", height="30%", loc=2)
 axins.hist(comparison_df['Residuals'], bins=30, color='skyblue', edgecolor='black')
 axins.set_title('Residuals Distribution')
@@ -443,46 +441,25 @@ axins.set_xticks([])
 axins.set_yticks([])
 
 plt.tight_layout()
-plt.savefig("actual_vs_predicted.png")
-print("📁 Actual vs. predicted plot saved to actual_vs_predicted.png")
-
-# Add a third plot showing prediction error distribution by quantity range
-plt.figure(figsize=(12, 6))
-
-# Create quantity bins
-comparison_df['Quantity_Bin'] = pd.cut(comparison_df['Actual'], 10)
-bin_errors = comparison_df.groupby('Quantity_Bin').apply(
-    lambda x: np.sqrt(mean_squared_error(x['Actual'], x['Predicted']))
-).reset_index(name='Bin_RMSE')
-
-# Plot errors by bin
-plt.bar(range(len(bin_errors)), bin_errors['Bin_RMSE'], 
-        width=0.8, color='purple', alpha=0.7)
-plt.xticks(range(len(bin_errors)), 
-           [f"{b.left:.0f}-{b.right:.0f}" for b in bin_errors['Quantity_Bin']], 
-           rotation=45)
-plt.xlabel('Actual Quantity Range')
-plt.ylabel('RMSE within Range')
-plt.title('Prediction Error by Quantity Range')
-plt.grid(True, axis='y', alpha=0.3)
-plt.tight_layout()
-plt.savefig("prediction_error_by_range.png")
-print("📁 Prediction error plot saved to prediction_error_by_range.png")
+plt.savefig("images/gradboost_residuals.png")
+print("📁 Residual plot saved to gradboost_residuals.png")
 
 # Price elasticity analysis
 print("\n📊 Analyzing price elasticity...")
-price_col_idx = np.where(X_train_selected.columns == 'Price')[0][0]
 price_multipliers = np.linspace(0.5, 2.5, 50)
-baseline_predictions = np.expm1(model.predict(X_test_selected))
+baseline_predictions = np.expm1(model.predict(X_test))
 
 results = []
 for multiplier in price_multipliers:
-    X_mod = X_test_selected.copy()
+    X_mod = X_test.copy()
     X_mod['Price'] *= multiplier
     
-    # IMPORTANT: Recompute all price-dependent features
+    # Recompute all price-dependent features
     X_mod = apply_feature_engineering(X_mod)
-    X_mod = X_mod[extended_features]  # Restrict to original feature set
+    X_mod = X_mod[extended_features]
+    
+    # Handle any missing values
+    X_mod = X_mod.fillna(X_mod.median())
     
     new_pred_log = model.predict(X_mod)
     new_pred = np.expm1(new_pred_log)
@@ -497,7 +474,7 @@ for multiplier in price_multipliers:
 elasticity_df = pd.DataFrame(results)
 print(elasticity_df)
 
-# Elasticity calc
+# Calculate elasticity
 try:
     p_up = elasticity_df['Price_Multiplier'].max()
     p_down = elasticity_df['Price_Multiplier'].min()
@@ -522,43 +499,78 @@ except Exception as e:
 # Smooth the predicted quantity with a rolling average
 elasticity_df['Smoothed_Quantity'] = elasticity_df['Pred_Quantity'].rolling(window=5, center=True).mean()
 
-# Plot smoothed and raw curve
+# Plot elasticity curve
 plt.figure(figsize=(10, 6))
-plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
-plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Demand')
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed')
 plt.axvline(x=1.0, color='r', linestyle='--', label='Current Price')
+
+# Calculate and plot revenue curve
+revenues = elasticity_df['Price_Multiplier'] * elasticity_df['Pred_Quantity']
+revenue_scale = elasticity_df['Pred_Quantity'].max() / revenues.max()
+plt.plot(elasticity_df['Price_Multiplier'], revenues * revenue_scale, 
+         marker='s', color='green', label='Revenue (scaled)')
+
+# Calculate the price that maximizes revenue
+max_revenue_idx = revenues.idxmax()
+plt.axvline(x=elasticity_df.loc[max_revenue_idx, 'Price_Multiplier'], color='green', 
+            linestyle=':', label=f'Max Revenue Price (x{elasticity_df.loc[max_revenue_idx, "Price_Multiplier"]:.2f})')
+
+plt.title('Gradient Boosting: Price Sensitivity Analysis')
 plt.xlabel('Price Multiplier')
-plt.ylabel('Predicted Quantity')
-plt.title('Price Sensitivity Analysis (Smoothed)')
+plt.ylabel('Predicted Quantity / Scaled Revenue')
+plt.grid(True, alpha=0.3)
 plt.legend()
-plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig("price_sensitivity_smoothed.png")
-print("📁 Smoothed price sensitivity analysis saved to price_sensitivity_smoothed.png")
+plt.savefig("images/gradboost_price_sensitivity.png")
+print("📁 Price sensitivity plot saved to gradboost_price_sensitivity.png")
 
-# Predicted quantity by week
-print("\n🕰️ Plotting predicted weekly quantity trend...")
-predicted_quantities = np.expm1(model.predict(X))
-df_clean = df_clean.copy()  # Create an explicit copy
-df_clean.loc[:, 'PredictedQuantity'] = predicted_quantities
-weekly_avg = df_clean.groupby(['Year', 'Week'])['PredictedQuantity'].mean().reset_index()
-weekly_avg['YearWeek'] = weekly_avg['Year'].astype(str) + "-W" + weekly_avg['Week'].astype(str)
-weekly_avg = weekly_avg.sort_values(['Year', 'Week'])
+# If LightGBM model exists, compare with it
+try:
+    lgbm_model = joblib.load('../models/lgbm_model.pkl')
+    
+    print("\n🔍 Comparing Gradient Boosting vs LightGBM performance...")
+    
+    # Get LightGBM predictions
+    lgbm_pred_log = lgbm_model.predict(X_test)
+    lgbm_pred = np.expm1(lgbm_pred_log)
+    
+    # Calculate metrics for LightGBM
+    lgbm_rmse = math.sqrt(mean_squared_error(y_test_exp, lgbm_pred))
+    lgbm_mae = mean_absolute_error(y_test_exp, lgbm_pred)
+    lgbm_r2 = r2_score(y_test_exp, lgbm_pred)
+    
+    # Print comparison
+    print("\n📊 Model Comparison:")
+    print(f"{'Metric':<10} {'LightGBM':>10} {'GradBoost':>10} {'Difference':>12}")
+    print(f"{'-'*10:<10} {'-'*10:>10} {'-'*10:>10} {'-'*12:>12}")
+    print(f"{'RMSE':<10} {lgbm_rmse:>10.2f} {rmse:>10.2f} {rmse-lgbm_rmse:>+12.2f}")
+    print(f"{'MAE':<10} {lgbm_mae:>10.2f} {mae:>10.2f} {mae-lgbm_mae:>+12.2f}")
+    print(f"{'R²':<10} {lgbm_r2:>10.2f} {r2:>10.2f} {r2-lgbm_r2:>+12.2f}")
+    
+    # Plot comparison
+    plt.figure(figsize=(10, 6))
+    metrics = ['RMSE', 'MAE', '1-R²']
+    lgbm_values = [lgbm_rmse, lgbm_mae, 1-lgbm_r2]
+    gb_values = [rmse, mae, 1-r2]
+    
+    x = np.arange(len(metrics))
+    width = 0.35
+    
+    plt.bar(x - width/2, lgbm_values, width, label='LightGBM')
+    plt.bar(x + width/2, gb_values, width, label='Gradient Boosting')
+    
+    plt.xlabel('Metric')
+    plt.ylabel('Value')
+    plt.title('LightGBM vs Gradient Boosting (Lower is Better)')
+    plt.xticks(x, metrics)
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig("images/model_comparison.png")
+    print("📁 Model comparison saved to model_comparison.png")
+    
+except Exception as e:
+    print(f"\n⚠️ Could not compare with LightGBM model: {e}")
 
-print("\n Summing predicted demand across weeks...")
-predicted_log = model.predict(X)
-df_clean = df_clean.copy()  # Create another explicit copy if needed
-df_clean.loc[:, 'Predicted_LogQuantity'] = predicted_log
-df_clean.loc[:, 'Predicted_Quantity'] = np.expm1(df_clean['Predicted_LogQuantity'])
-
-weekly_sum = df_clean.groupby('Week')['Predicted_Quantity'].sum().reset_index()
-
-plt.figure(figsize=(12, 6))
-plt.plot(weekly_sum['Week'], weekly_sum['Predicted_Quantity'], marker='o')
-plt.title('Total Predicted Demand per Week (Aggregated Over All Years)')
-plt.xlabel('Week Number')
-plt.ylabel('Summed Predicted Quantity')
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig("predicted_demand_summed_by_week.png")
-print("📁 Weekly demand plot saved to predicted_demand_summed_by_week.png")
+print("\n✅ Gradient Boosting demand prediction complete!")
