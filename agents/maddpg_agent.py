@@ -100,8 +100,8 @@ class MADDPGAgent(PricingAgent):
         self.tau = tau  # Target network update rate
         
         # Action bounds for continuous pricing (percentage change limits)
-        self.max_action = 0.15  # +15% price change
-        self.min_action = -0.10  # -10% price change
+        self.max_action = 0.25  # +25% price change
+        self.min_action = -0.25  # -25% price change
         
         # Create the actor and critic networks
         self._build_networks()
@@ -265,7 +265,8 @@ class MADDPGAgent(PricingAgent):
                     price_change_pct = abs(last_price / prev_price - 1.0)
                     
                     # Quadratically penalize price changes (more penalty for larger changes)
-                    stability_reward -= min(2.0, price_change_pct * price_change_pct * 20)
+                    price_penalty_weight = max(0.5, 2.0 * np.exp(-episode / 25))
+                    stability_reward -= price_penalty_weight * (price_change_pct ** 2)
             
             # Combined reward 
             reward = base_reward + stability_reward
@@ -397,7 +398,14 @@ class MADDPGAgent(PricingAgent):
             current_price = self.products[product_name].price
             
             # Apply temporal smoothing - only move partially toward target price
-            smoothing_factor = 0.3  # Only move 30% toward target price
+            # Fix: Use a fixed smoothing factor since episode isn't tracked in this class
+            smoothing_factor = 0.3  # Fixed smoothing factor (30% of the way to target price)
+            
+            # Alternative: Get episode from market observations if available
+            # if hasattr(self, 'last_market_observations') and 'episode' in self.last_market_observations:
+            #     episode = self.last_market_observations.get('episode', 0)
+            #     smoothing_factor = max(0.1, 0.3 * np.exp(-episode / 20))
+            
             smoothed_price = current_price + smoothing_factor * (new_price - current_price)
             
             # Ensure price doesn't go below cost + minimum margin

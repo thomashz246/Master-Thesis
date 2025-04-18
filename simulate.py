@@ -18,7 +18,9 @@ from env.product import Product
 from agents.rl_agent import RLAgent 
 from agents.maddpg_agent import MADDPGAgent
 from agents.madqn_agent import MADQNAgent
-from agents.qmix_agent import QMIXAgent  # Add this import
+from agents.qmix_agent import QMIXAgent
+from agents.random_agent import RandomPricingAgent  # Add this import
+from agents.rule_agent import RuleBasedAgent
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -114,6 +116,27 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
                             batch_size=64,
                             update_target_every=5,
                             num_agents=num_agents
+                        )
+                    )
+                elif agent_type == "random":
+                    agents.append(
+                        RandomPricingAgent(
+                            f"Agent{i+1}", 
+                            product_portfolios[i],
+                            min_adjustment=-0.10,  # 10% price decrease maximum
+                            max_adjustment=0.10    # 10% price increase maximum
+                        )
+                    )
+                elif agent_type == "rule":
+                    agents.append(
+                        RuleBasedAgent(
+                            f"Agent{i+1}", 
+                            product_portfolios[i],
+                            strategy=rule_strategy,  # You can pass this as a parameter or hardcode it
+                            markup_pct=0.20,
+                            undercut_pct=0.05,
+                            demand_threshold=0.10,
+                            seasonal_boost=0.15
                         )
                     )
                 else:  # Default to RLAgent
@@ -239,7 +262,6 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             plt.legend()
             plt.grid(True, alpha=0.3)
             plt.savefig(f"simulation_results_prices_ep{episode+1}.png")
-            plt.savefig(f"simulation_results_prices_ep{episode+1}.png")
             
             # Create visualization for price changes
             # Option 1: Heatmap of price changes
@@ -272,8 +294,8 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             plt.grid(True, alpha=0.3)
             plt.savefig(f"significant_price_changes_ep{episode+1}.png")
     
-    # Save the trained models
-    if agent_type in ["maddpg", "madqn", "qmix"]:  # Update this line
+    # Save the trained models - don't attempt to save RandomPricingAgent
+    if agent_type in ["maddpg", "madqn", "qmix"]:
         print(f"Saving {agent_type.upper()} models...")
         for agent in agents:
             agent.save()
@@ -334,8 +356,9 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     return episode_returns, final_metrics
 
 if __name__ == "__main__":
-    # Choose agent type: "rl", "maddpg", "madqn", or "qmix"  # Update this comment
-    agent_type = "qmix"  # Change this to select agent type
+    # Choose agent type: "rl", "maddpg", "madqn", "qmix", "random", or "rule"
+    agent_type = "maddpg"  # Change this to select agent type
+    rule_strategy = "competitor_match"  # Only used when agent_type is "rule"
     episode_returns, metrics = run_simulation(weeks=104, episodes=35, num_agents=4, agent_type=agent_type)
     print("\nSimulation complete!")
     print("\nTotal revenue by episode:")
