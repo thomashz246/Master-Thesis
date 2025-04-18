@@ -17,13 +17,15 @@ from env.market_env import MarketEnv
 from env.product import Product
 from agents.rl_agent import RLAgent 
 from agents.maddpg_agent import MADDPGAgent
+from agents.madqn_agent import MADQNAgent
+from agents.qmix_agent import QMIXAgent  # Add this import
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import os
 import numpy as np
 
-def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
+def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     """Run multiple episodes of simulation for learning"""
     print("Starting simulation...")
     # Track agent learning performance across episodes
@@ -45,27 +47,27 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
             ],
             # Agent 2 – Budget & Midrange Focus
             [
-                Product("BudgetB1", 12.0, category_cluster=1),
-                Product("BudgetB2", 20.0, category_cluster=4),
-                Product("BudgetB3", 30.0, category_cluster=6),
-                Product("MidB4", 45.0, category_cluster=8),
-                Product("PremiumB5", 65.0, category_cluster=12)
+                Product("PremiumA1", 50.0, category_cluster=1),
+                Product("PremiumA2", 32.0, category_cluster=2),
+                Product("PremiumA3", 28.0, category_cluster=3),
+                Product("PremiumA4", 40.0, category_cluster=5),
+                Product("LuxuryA5", 55.4, category_cluster=10)
             ],
             # Agent 3 – Mixed Strategy, Overlapping with A2 & B4
             [
-                Product("MidC1", 13.0, category_cluster=2),
-                Product("MidC2", 23.0, category_cluster=4),
-                Product("MidC3", 33.0, category_cluster=6),
-                Product("PremiumC4", 48.0, category_cluster=8),
-                Product("LuxuryC5", 90.0, category_cluster=15)
+                Product("PremiumA1", 50.0, category_cluster=1),
+                Product("PremiumA2", 32.0, category_cluster=2),
+                Product("PremiumA3", 28.0, category_cluster=3),
+                Product("PremiumA4", 40.0, category_cluster=5),
+                Product("LuxuryA5", 55.4, category_cluster=10)
             ],
             # Agent 4 – Aggressive Undercutter with Wide Spread
             [
-                Product("PremiumA1", 10.0, category_cluster=1),  # competing directly
-                Product("PremiumA2", 18.0, category_cluster=2),
-                Product("BudgetD3", 25.0, category_cluster=5),
-                Product("PremiumD4", 55.0, category_cluster=10),
-                Product("LuxuryD5", 99.0, category_cluster=20)
+                Product("PremiumA1", 50.0, category_cluster=1),
+                Product("PremiumA2", 32.0, category_cluster=2),
+                Product("PremiumA3", 28.0, category_cluster=3),
+                Product("PremiumA4", 40.0, category_cluster=5),
+                Product("LuxuryA5", 55.4, category_cluster=10)
             ]
         ]
         
@@ -73,7 +75,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
         agents = []
         for i in range(num_agents):
             if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
-                if use_maddpg:
+                if agent_type == "maddpg":
                     agents.append(
                         MADDPGAgent(
                             f"Agent{i+1}", 
@@ -85,7 +87,36 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
                             exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),  # Exponential decay
                         )
                     )
-                else:
+                elif agent_type == "madqn":
+                    agents.append(
+                        MADQNAgent(
+                            f"Agent{i+1}", 
+                            product_portfolios[i],
+                            learning_rate=0.001,
+                            discount_factor=0.95,
+                            exploration_rate=max(0.1, 1.0 * np.exp(-episode/10)),  # Exponential decay
+                            exploration_decay=0.995,
+                            min_exploration=0.05,
+                            batch_size=64,
+                            update_target_every=5
+                        )
+                    )
+                elif agent_type == "qmix":
+                    agents.append(
+                        QMIXAgent(
+                            f"Agent{i+1}", 
+                            product_portfolios[i],
+                            learning_rate=0.001,
+                            discount_factor=0.95,
+                            exploration_rate=max(0.1, 1.0 * np.exp(-episode/10)),  # Exponential decay
+                            exploration_decay=0.995,
+                            min_exploration=0.05,
+                            batch_size=64,
+                            update_target_every=5,
+                            num_agents=num_agents
+                        )
+                    )
+                else:  # Default to RLAgent
                     agents.append(
                         RLAgent(
                             f"Agent{i+1}", 
@@ -241,9 +272,9 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
             plt.grid(True, alpha=0.3)
             plt.savefig(f"significant_price_changes_ep{episode+1}.png")
     
-    # Save the trained MADDPG models if using them
-    if use_maddpg:
-        print("Saving MADDPG models...")
+    # Save the trained models
+    if agent_type in ["maddpg", "madqn", "qmix"]:  # Update this line
+        print(f"Saving {agent_type.upper()} models...")
         for agent in agents:
             agent.save()
     
@@ -303,9 +334,9 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, use_maddpg=False):
     return episode_returns, final_metrics
 
 if __name__ == "__main__":
-    # Choose agent type: False for Q-Learning, True for MADDPG
-    use_maddpg = True
-    episode_returns, metrics = run_simulation(weeks=104, episodes=35, num_agents=4, use_maddpg=use_maddpg)
+    # Choose agent type: "rl", "maddpg", "madqn", or "qmix"  # Update this comment
+    agent_type = "qmix"  # Change this to select agent type
+    episode_returns, metrics = run_simulation(weeks=104, episodes=35, num_agents=4, agent_type=agent_type)
     print("\nSimulation complete!")
     print("\nTotal revenue by episode:")
     for episode in range(len(episode_returns['Agent1'])):

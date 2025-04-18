@@ -106,7 +106,7 @@ class MarketEnv:
         ]
         
         # Predict with the ML model using all features
-        log_quantity = self.demand_model.predict(df[extended_features])[0]
+        log_quantity = self.demand_model.predict(df[extended_features], predict_disable_shape_check=True)[0]
         base_quantity = np.expm1(log_quantity)
         
         # Apply competitive effects (optional, your model may already handle this)
