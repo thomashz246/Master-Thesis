@@ -77,76 +77,35 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         agents = []
         for i in range(num_agents):
             if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
-                if agent_type == "maddpg":
+                if i == 0:  # First agent is MADDPG
                     agents.append(
                         MADDPGAgent(
                             f"Agent{i+1}", 
                             product_portfolios[i],
-                            actor_lr=0.0005,        # Reduced from 0.001
-                            critic_lr=0.001,        # Reduced from 0.002
-                            discount_factor=0.98,   # Higher discount factor for longer-term focus
-                            tau=0.005,              # Slower target network updates
-                            exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),  # Exponential decay
+                            actor_lr=0.0005,
+                            critic_lr=0.001,
+                            discount_factor=0.98,
+                            tau=0.005,
+                            exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
                         )
                     )
-                elif agent_type == "madqn":
-                    agents.append(
-                        MADQNAgent(
-                            f"Agent{i+1}", 
-                            product_portfolios[i],
-                            learning_rate=0.001,
-                            discount_factor=0.95,
-                            exploration_rate=max(0.1, 1.0 * np.exp(-episode/10)),  # Exponential decay
-                            exploration_decay=0.995,
-                            min_exploration=0.05,
-                            batch_size=64,
-                            update_target_every=5
-                        )
-                    )
-                elif agent_type == "qmix":
-                    agents.append(
-                        QMIXAgent(
-                            f"Agent{i+1}", 
-                            product_portfolios[i],
-                            learning_rate=0.001,
-                            discount_factor=0.95,
-                            exploration_rate=max(0.1, 1.0 * np.exp(-episode/10)),  # Exponential decay
-                            exploration_decay=0.995,
-                            min_exploration=0.05,
-                            batch_size=64,
-                            update_target_every=5,
-                            num_agents=num_agents
-                        )
-                    )
-                elif agent_type == "random":
-                    agents.append(
-                        RandomPricingAgent(
-                            f"Agent{i+1}", 
-                            product_portfolios[i],
-                            min_adjustment=-0.10,  # 10% price decrease maximum
-                            max_adjustment=0.10    # 10% price increase maximum
-                        )
-                    )
-                elif agent_type == "rule":
+                else:  # Other agents are rule-based
+                    # You can use different strategies for each rule agent if desired
+                    strategy = rule_strategy  # Use the default strategy
+                    
+                    # Optionally, use different rule strategies for each agent
+                    # strategies = ["competitor_match", "demand_responsive", "historical_anchor"]
+                    # strategy = strategies[i-1]  # Use a different strategy for each agent
+                    
                     agents.append(
                         RuleBasedAgent(
                             f"Agent{i+1}", 
                             product_portfolios[i],
-                            strategy=rule_strategy,  # You can pass this as a parameter or hardcode it
+                            strategy=strategy,
                             markup_pct=0.20,
                             undercut_pct=0.05,
                             demand_threshold=0.10,
                             seasonal_boost=0.15
-                        )
-                    )
-                else:  # Default to RLAgent
-                    agents.append(
-                        RLAgent(
-                            f"Agent{i+1}", 
-                            product_portfolios[i],
-                            learning_rate=0.05,
-                            exploration_rate=max(0.2, 1.0 - episode*0.3),  # Decrease exploration over episodes
-                            discount_factor=0.90 + i * 0.02  # Different time horizons
                         )
                     )
         
@@ -297,8 +256,15 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     # Save the trained models - don't attempt to save RandomPricingAgent
     if agent_type in ["maddpg", "madqn", "qmix"]:
         print(f"Saving {agent_type.upper()} models...")
-        for agent in agents:
-            agent.save()
+        try:
+            for agent in agents:
+                if i == 0:  # Only save the first agent which is MADDPG
+                    print(f"Saving model for {agent.agent_id}...")
+                    agent.save()
+            print("All models saved successfully")
+        except Exception as e:
+            print(f"Error saving models: {e}")
+            traceback.print_exc()
     
     # Plot learning progress across episodes
     plt.figure(figsize=(10, 6))
@@ -316,29 +282,61 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     # Create final metrics for evaluation
     final_metrics = {}
     try:
+        print("\nCalculating evaluation metrics...")
+        
+        # Make sure price_df exists and is properly populated
+        if 'price_df' not in locals() or price_df.empty:
+            print("ERROR: price_df is not defined or is empty")
+            results_df = pd.DataFrame(weekly_results)
+            price_df = pd.DataFrame(price_tracking)
+            changes_df = pd.DataFrame(price_changes)
+            print(f"Recreated price_df with shape: {price_df.shape}")
+        
+        # Add more debug output
+        print(f"Price dataframe shape: {price_df.shape}")
+        print(f"Price dataframe columns: {price_df.columns.tolist()}")
+        print(f"Episode returns: {episode_returns}")
+        
+        # Check if the required functions are imported
+        print("Checking if required functions are available...")
+        print(f"nash_equilibrium_proximity available: {'nash_equilibrium_proximity' in globals()}")
+        print(f"calculate_price_stability available: {'calculate_price_stability' in globals()}")
+        
+        print("Calculating Nash equilibrium proximity...")
         nash_scores, nash_overall = nash_equilibrium_proximity(price_df)
+        print("Nash equilibrium metrics calculated successfully")
+        
+        print("Calculating price stability...")
+        price_stability = calculate_price_stability(price_df, episode)
+        print("Price stability calculated successfully")
+        
+        print("Calculating optimality gap...")
+        opt_gap = revenue_optimality_gap(episode_returns)
+        print("Optimality gap calculated successfully")
+        
+        print("Calculating price-revenue elasticity...")
+        elasticity = price_revenue_elasticity(price_df, episode_returns)
+        print("Elasticity calculated successfully")
+        
+        print("Calculating global vs individual optimality...")
+        global_vs_ind = global_vs_individual_optimality(price_df, episode_returns)
+        print("Global vs individual optimality calculated successfully")
+        
+        print("Calculating social welfare metric...")
+        welfare = social_welfare_metric(price_df, episode_returns)
+        print("Social welfare calculated successfully")
         
         final_metrics = {
-            'price_stability': calculate_price_stability(price_df, episode),
+            'price_stability': price_stability,
             'nash_equilibrium': nash_scores,
             'nash_overall': nash_overall,
-            'optimality_gap': revenue_optimality_gap(episode_returns),
-            'price_revenue_elasticity': price_revenue_elasticity(price_df, episode_returns),
-            'global_vs_individual': global_vs_individual_optimality(price_df, episode_returns),
-            'social_welfare': social_welfare_metric(price_df, episode_returns)
+            'optimality_gap': opt_gap,
+            'price_revenue_elasticity': elasticity,
+            'global_vs_individual': global_vs_ind,
+            'social_welfare': welfare
         }
         
-        # Print or save metrics
-        print("\nConvergence & Optimality Metrics:")
-        for metric_name, values in final_metrics.items():
-            if isinstance(values, dict):
-                print(f"\n{metric_name.replace('_', ' ').title()}:")
-                for k, v in values.items():
-                    print(f"  {k}: {v:.4f}")
-            else:
-                print(f"{metric_name.replace('_', ' ').title()}: {values:.4f}")
-                
-        # Save metrics to CSV
+        # Save metrics to CSV without printing them here
         metrics_df = pd.DataFrame()
         for metric_name, values in final_metrics.items():
             if isinstance(values, dict):
@@ -347,23 +345,47 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             else:
                 metrics_df.loc['overall', metric_name] = values
         
+        # Make sure the logs directory exists
+        os.makedirs("logs", exist_ok=True)
         metrics_df.to_csv(f"logs/optimization_metrics_ep{episode+1}.csv")
+        print(f"Saved metrics to logs/optimization_metrics_ep{episode+1}.csv")
+        
     except Exception as e:
         print(f"\nError calculating evaluation metrics: {e}")
+        print("Error details:")
         import traceback
         traceback.print_exc()
     
     return episode_returns, final_metrics
 
 if __name__ == "__main__":
-    # Choose agent type: "rl", "maddpg", "madqn", "qmix", "random", or "rule"
-    agent_type = "maddpg"  # Change this to select agent type
-    rule_strategy = "competitor_match"  # Only used when agent_type is "rule"
-    episode_returns, metrics = run_simulation(weeks=104, episodes=35, num_agents=4, agent_type=agent_type)
-    print("\nSimulation complete!")
-    print("\nTotal revenue by episode:")
-    for episode in range(len(episode_returns['Agent1'])):
-        print(f"Episode {episode+1}: ", end="")
-        for agent_id in episode_returns.keys():
-            print(f"{agent_id}: ${episode_returns[agent_id][episode]:.2f} ", end="")
-        print()
+    # Only need to set agent_type for the first agent, others will be rule-based
+    agent_type = "maddpg"
+    # This will be used for all rule-based agents
+    rule_strategy = "competitor_match"  # Other options: "static_markup", "historical_anchor", "demand_responsive", "seasonal_pricing"
+    
+    try:
+        episode_returns, metrics = run_simulation(weeks=104, episodes=5, num_agents=4, agent_type=agent_type)
+        print("\nSimulation complete!")
+        print("\nTotal revenue by episode:")
+        for episode in range(len(episode_returns['Agent1'])):
+            print(f"Episode {episode+1}: ", end="")
+            for agent_id in episode_returns.keys():
+                print(f"{agent_id}: ${episode_returns[agent_id][episode]:.2f} ", end="")
+            print()
+        
+        # Print metrics after simulation - only place where metrics are printed
+        print("\nConvergence & Optimality Metrics:")
+        if metrics:
+            for metric_name, values in metrics.items():
+                if isinstance(values, dict):
+                    print(f"\n{metric_name.replace('_', ' ').title()}:")
+                    for k, v in values.items():
+                        print(f"  {k}: {v:.4f}")
+                else:
+                    print(f"{metric_name.replace('_', ' ').title()}: {values:.4f}")
+        else:
+            print("No metrics were calculated successfully.")
+    except Exception as e:
+        print("\nCRITICAL ERROR in main execution:")
+        traceback.print_exc()
