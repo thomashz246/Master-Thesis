@@ -78,24 +78,21 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         for i in range(num_agents):
             if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
                 if i == 0:  # First agent is MADDPG
-                    agents.append(
-                        MADDPGAgent(
-                            f"Agent{i+1}", 
-                            product_portfolios[i],
-                            actor_lr=0.0005,
-                            critic_lr=0.001,
-                            discount_factor=0.98,
-                            tau=0.005,
-                            exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
-                        )
+                    maddpg_agent = MADDPGAgent(
+                        f"Agent{i+1}", 
+                        product_portfolios[i],
+                        actor_lr=0.0005,
+                        critic_lr=0.001,
+                        discount_factor=0.98,
+                        tau=0.005,
+                        exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
                     )
+                    # Enable debugging/tracking for this agent
+                    maddpg_agent.debug_mode = True
+                    agents.append(maddpg_agent)
                 else:  # Other agents are rule-based
                     # You can use different strategies for each rule agent if desired
                     strategy = rule_strategy  # Use the default strategy
-                    
-                    # Optionally, use different rule strategies for each agent
-                    # strategies = ["competitor_match", "demand_responsive", "historical_anchor"]
-                    # strategy = strategies[i-1]  # Use a different strategy for each agent
                     
                     agents.append(
                         RuleBasedAgent(
@@ -356,6 +353,46 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         import traceback
         traceback.print_exc()
     
+    # After your simulation completes, add this code
+    if agent_type == "maddpg" and hasattr(agents[0], 'actor_losses') and len(agents[0].actor_losses) > 0:
+        # Plot actor and critic losses
+        plt.figure(figsize=(12, 8))
+        
+        plt.subplot(2, 2, 1)
+        plt.plot(agents[0].actor_losses)
+        plt.title('Actor Loss')
+        plt.xlabel('Training Step')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 2)
+        plt.plot(agents[0].critic_losses)
+        plt.title('Critic Loss')
+        plt.xlabel('Training Step')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 3)
+        if len(agents[0].actions_before_noise) > 0:
+            plt.plot(agents[0].actions_before_noise[-100:], label='Before Noise')
+            plt.plot(agents[0].actions_after_noise[-100:], label='After Noise', alpha=0.7)
+            plt.title('Recent Actions (Last 100)')
+            plt.xlabel('Step')
+            plt.ylabel('Action Value')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+        
+        plt.subplot(2, 2, 4)
+        episodes_x = np.arange(1, episodes+1)
+        exploration_values = [max(0.1, 0.3 * np.exp(-ep/15)) for ep in range(episodes)]
+        plt.plot(episodes_x, exploration_values)
+        plt.title('Exploration Noise Decay')
+        plt.xlabel('Episode')
+        plt.ylabel('Noise Magnitude')
+        plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig("maddpg_learning_metrics.png")
+        print("Saved MADDPG learning metrics visualization to maddpg_learning_metrics.png")
+    
     return episode_returns, final_metrics
 
 if __name__ == "__main__":
@@ -365,7 +402,7 @@ if __name__ == "__main__":
     rule_strategy = "competitor_match"  # Other options: "static_markup", "historical_anchor", "demand_responsive", "seasonal_pricing"
     
     try:
-        episode_returns, metrics = run_simulation(weeks=104, episodes=5, num_agents=4, agent_type=agent_type)
+        episode_returns, metrics = run_simulation(weeks=104, episodes=15, num_agents=4, agent_type=agent_type)
         print("\nSimulation complete!")
         print("\nTotal revenue by episode:")
         for episode in range(len(episode_returns['Agent1'])):

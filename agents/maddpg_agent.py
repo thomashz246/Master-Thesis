@@ -5,8 +5,6 @@ from collections import deque
 import random
 import sys, os
 from env.pricing_agent import PricingAgent
-
-# Add this at the top of your maddpg_agent.py file (after imports)
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force CPU-only mode
 
