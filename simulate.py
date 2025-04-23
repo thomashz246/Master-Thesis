@@ -35,7 +35,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     
     for episode in range(episodes):
         print(f"\n=== Episode {episode+1}/{episodes} ===")
-        # print("Creating product portfolios...")
+        print("Creating product portfolios...")
         
         # Create multiple product portfolios
         product_portfolios = [
@@ -73,38 +73,46 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             ]
         ]
         
+        print("Creating agents...")
         # Create agents with different strategies/parameters
         agents = []
-        for i in range(num_agents):
-            if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
-                if i == 0:  # First agent is MADDPG
-                    maddpg_agent = MADDPGAgent(
-                        f"Agent{i+1}", 
-                        product_portfolios[i],
-                        actor_lr=0.0005,
-                        critic_lr=0.001,
-                        discount_factor=0.98,
-                        tau=0.005,
-                        exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
-                    )
-                    # Enable debugging/tracking for this agent
-                    maddpg_agent.debug_mode = True
-                    agents.append(maddpg_agent)
-                else:  # Other agents are rule-based
-                    # You can use different strategies for each rule agent if desired
-                    strategy = rule_strategy  # Use the default strategy
-                    
-                    agents.append(
-                        RuleBasedAgent(
+        try:
+            for i in range(num_agents):
+                print(f"Creating agent {i+1}...")
+                if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
+                    if i == 0:  # First agent is MADDPG
+                        print("Creating MADDPG agent...")
+                        maddpg_agent = MADDPGAgent(
                             f"Agent{i+1}", 
                             product_portfolios[i],
-                            strategy=strategy,
-                            markup_pct=0.20,
-                            undercut_pct=0.05,
-                            demand_threshold=0.10,
-                            seasonal_boost=0.15
+                            actor_lr=0.0005,
+                            critic_lr=0.0001,
+                            discount_factor=0.98,
+                            tau=0.005,
+                            exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
                         )
-                    )
+                        # Enable debugging/tracking for this agent
+                        print("Setting debug mode for MADDPG agent...")
+                        maddpg_agent.debug_mode = True
+                        agents.append(maddpg_agent)
+                    else:  # Other agents are rule-based
+                        print(f"Creating rule-based agent with strategy: {rule_strategy}")
+                        agents.append(
+                            RuleBasedAgent(
+                                f"Agent{i+1}", 
+                                product_portfolios[i],
+                                strategy=rule_strategy,
+                                markup_pct=0.20,
+                                undercut_pct=0.05,
+                                demand_threshold=0.10,
+                                seasonal_boost=0.15
+                            )
+                        )
+        except Exception as e:
+            print(f"ERROR creating agents: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         print(f"Created {len(agents)} agents")
         
@@ -129,6 +137,11 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
                         previous_prices[f"{agent.agent_id}_{product_name}"] = product.price
                 
                 demands, revenues = market.step()
+                
+                # Add this after the market step to trigger learning
+                # Call learn_from_experiences for the MADDPG agent
+                if i == 0 and hasattr(agents[0], 'learn_from_experiences'):
+                    agents[0].learn_from_experiences()
                 
                 # Print current state (less frequently to reduce output volume)
                 if week % 1 == 0:
@@ -354,6 +367,33 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         traceback.print_exc()
     
     # After your simulation completes, add this code
+    print(f"Agent type: {agent_type}")
+    print(f"Agent has debug_mode attribute: {hasattr(agents[0], 'debug_mode')}")
+    print(f"Agent has actor_losses attribute: {hasattr(agents[0], 'actor_losses')}")
+    
+    if hasattr(agents[0], 'actor_losses'):
+        print(f"Length of actor_losses: {len(agents[0].actor_losses)}")
+    else:
+        print("WARNING: MADDPG agent doesn't have actor_losses attribute")
+        # Let's add these attributes now to make the plotting work
+        agents[0].actor_losses = []
+        agents[0].critic_losses = []
+        agents[0].actions_before_noise = []
+        agents[0].actions_after_noise = []
+        print("Added missing attributes to agent")
+
+    if agent_type == "maddpg" and hasattr(agents[0], 'actor_losses'):
+        # Plot whatever data we have, even if empty
+        print(f"Preparing to plot learning metrics...")
+        plt.figure(figsize=(12, 8))
+        
+        plt.subplot(2, 2, 1)
+        plt.plot(agents[0].actor_losses if len(agents[0].actor_losses) > 0 else [0])
+        plt.title('Actor Loss (empty if no data)')
+        plt.xlabel('Training Step')
+        plt.grid(True, alpha=0.3)
+        # Rest of plotting code...
+    
     if agent_type == "maddpg" and hasattr(agents[0], 'actor_losses') and len(agents[0].actor_losses) > 0:
         # Plot actor and critic losses
         plt.figure(figsize=(12, 8))

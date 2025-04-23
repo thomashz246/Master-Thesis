@@ -25,19 +25,21 @@ class ActorNetwork(tf.keras.Model):
         return self.out(x)
 
 class CriticNetwork(tf.keras.Model):
-    """Critic (Value) Network for MADDPG"""
-    def __init__(self, state_dim, action_dim, name='critic'):
+    """Centralized Critic for MADDPG"""
+    def __init__(self, state_dim, action_dim, num_agents=4, name='critic'):
         super(CriticNetwork, self).__init__(name=name)
         self.state_fc = layers.Dense(128, activation='relu')
         self.action_fc = layers.Dense(64, activation='relu')
         self.concat = layers.Concatenate()
-        self.fc1 = layers.Dense(128, activation='relu')
-        self.fc2 = layers.Dense(64, activation='relu')
-        self.out = layers.Dense(1)  # Q-value output (no activation)
+        self.fc1 = layers.Dense(256, activation='relu')
+        self.fc2 = layers.Dense(128, activation='relu')
+        self.out = layers.Dense(1)
         
-    def call(self, state, action):
-        s = self.state_fc(state)
-        a = self.action_fc(action)
+    def call(self, all_states, all_actions):
+        # all_states shape: [batch_size, num_agents * state_dim]
+        # all_actions shape: [batch_size, num_agents * action_dim]
+        s = self.state_fc(all_states)
+        a = self.action_fc(all_actions)
         x = self.concat([s, a])
         x = self.fc1(x)
         x = self.fc2(x)
@@ -54,7 +56,7 @@ class ReplayBuffer:
     def sample(self, batch_size):
         # Add recency bias by sampling more from recent experiences
         buffer_size = len(self.buffer)
-        if buffer_size <= batch_size:
+        if (buffer_size <= batch_size):
             return map(np.array, zip(*self.buffer))
             
         # More weight to recent experiences
@@ -118,6 +120,13 @@ class MADDPGAgent(PricingAgent):
         
         # Ensure TensorFlow operations are initialized
         self._initialize_networks()
+        
+        # Debug tracking
+        self.debug_mode = False
+        self.actor_losses = []
+        self.critic_losses = []
+        self.actions_before_noise = []
+        self.actions_after_noise = []
     
     def _build_networks(self):
         """Build the actor and critic networks (main and target)"""
@@ -245,83 +254,43 @@ class MADDPGAgent(PricingAgent):
         return state
     
     def act(self, week, year, is_holiday, market_observations=None):
-        """Take action based on market observations using MADDPG"""
-        # print(f"Agent {self.agent_id} acting at week {week}, year {year}")
+        # Store last market observations for reference
+        self.last_market_observations = market_observations if market_observations else {}
         
-        try:
-            # Calculate base reward from revenue change
-            total_revenue = sum(self.revenue_history[-1:] or [0])
-            base_reward = total_revenue - self.last_revenue
+        # Extract state from market observations if available
+        if market_observations:
+            # Create state representation
+            # FIXING THE METHOD NAME HERE - was create_state_representation
+            state = self.get_state_representation(list(self.products.keys())[0], market_observations)
             
-            # Add price stability component to reward
-            stability_reward = 0
+            # Get action from neural network
+            action = self.get_action(state)
+            
+            # Apply action to product pricing
             for product_name, product in self.products.items():
-                if len(product.price_history) >= 2:
-                    # Calculate percentage price change
-                    last_price = product.price_history[-1]
-                    prev_price = product.price_history[-2]
-                    price_change_pct = abs(last_price / prev_price - 1.0)
-                    
-                    # Quadratically penalize price changes (more penalty for larger changes)
-                    price_penalty_weight = max(0.5, 2.0 * np.exp(-episode / 25))
-                    stability_reward -= price_penalty_weight * (price_change_pct ** 2)
+                self.set_price(product_name, self.scale_action_to_price(action[0], product))
             
-            # Combined reward 
-            reward = base_reward + stability_reward
-            self.last_revenue = total_revenue
+            # Store experience in replay buffer if we have previous state
+            if hasattr(self, 'previous_state') and self.previous_state is not None:
+                # Calculate reward as revenue increase
+                previous_revenue = sum(self.revenue_history[-2:-1]) if len(self.revenue_history) > 1 else 0
+                current_revenue = self.revenue_history[-1] if self.revenue_history else 0
+                reward = current_revenue - previous_revenue
+                
+                # Store experience: (state, action, reward, next_state, done)
+                self.buffer.add(self.previous_state, self.previous_action, reward, state, False)
+                
+                # Now learn from experiences
+                self.learn_from_experiences()
             
-            # Calculate annealed action limits based on episode
-            episode = market_observations.get('episode', 0)
-            max_action_annealed = self.max_action * (0.5 + 0.5 * np.exp(-episode/20))
-            min_action_annealed = self.min_action * (0.5 + 0.5 * np.exp(-episode/20))
-            
-            # Process each product
+            # Update previous state/action for next step
+            self.previous_state = state
+            self.previous_action = action
+        else:
+            # Default behavior if no market observations
             for product_name, product in self.products.items():
-                # Get current state
-                current_state = self.get_state_representation(product_name, market_observations)
-                
-                # Learn from previous action if we have one
-                if product_name in self.last_state and product_name in self.last_action:
-                    self.buffer.add(
-                        self.last_state[product_name], 
-                        self.last_action[product_name],
-                        reward,  
-                        current_state,
-                        False  # Not terminal state
-                    )
-                
-                # Store current state
-                self.last_state[product_name] = current_state
-                
-                # Get action from policy with noise for exploration
-                action = self.get_action(current_state)
-                self.last_action[product_name] = action
-                
-                # Apply the chosen price change with annealed limits
-                price_change = action[0] * (max_action_annealed - min_action_annealed) + min_action_annealed
-                new_price = product.price * (1 + price_change)
-                
-                # Apply action (set new price)
-                self.set_price(product_name, new_price)
-            
-            # Add debug before learn_from_experiences
-            # print(f"Buffer size: {self.buffer.size()}/{self.batch_size}")
-            
-            # Learn from batch of previous experiences
-            self.learn_from_experiences()
-            
-            # Debug after learn_from_experiences
-            # print(f"Agent {self.agent_id} completed act() method")
-            
-        except Exception as e:
-            # print(f"ERROR in MADDPG act(): {e}")
-            import traceback
-            traceback.print_exc()
-            # Continue without raising to prevent simulation from stopping
-            
-        # Decay exploration noise
-        if self.exploration_noise > self.min_noise:
-            self.exploration_noise *= self.noise_decay
+                current_price = product.price
+                # Default pricing logic
     
     def get_action(self, state):
         """Get action from actor network and add exploration noise"""
@@ -331,22 +300,30 @@ class MADDPGAgent(PricingAgent):
         # Get deterministic action from policy
         action = self.actor(state_batch).numpy()[0]
         
+        # Track actions before noise if in debug mode
+        if self.debug_mode:
+            self.actions_before_noise.append(float(action[0]))
+        
         # Add exploration noise
         noise = np.random.normal(0, self.exploration_noise, size=self.action_dim)
         noisy_action = action + noise
         
         # Clip action to [-1, 1]
-        return np.clip(noisy_action, -1.0, 1.0)
-    
+        clipped_action = np.clip(noisy_action, -1.0, 1.0)
+        
+        # Track actions after noise if in debug mode
+        if self.debug_mode:
+            self.actions_after_noise.append(float(clipped_action[0]))
+        
+        return clipped_action
+
     def learn_from_experiences(self):
         """Learn from batch of experiences using MADDPG algorithm"""
         # Only learn if we have enough samples
         if self.buffer.size() < self.batch_size:
-            # print(f"Not enough samples in buffer: {self.buffer.size()}/{self.batch_size}")
             return
         
         try:
-            # print("Learning from experiences...")
             # Sample batch of experiences
             states, actions, rewards, next_states, dones = self.buffer.sample(self.batch_size)
             
@@ -357,16 +334,24 @@ class MADDPGAgent(PricingAgent):
             next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
             dones = tf.convert_to_tensor(dones, dtype=tf.float32)
             
+            # Since we don't have access to other agents' states/actions in this implementation,
+            # We'll use a simplified version that works with the local observations
+            
+            # Update critic network
             with tf.GradientTape() as tape:
-                # Compute target Q-values
+                # Get target actions from target actor network
                 target_actions = self.target_actor(next_states)
+                
+                # Get target Q value using target networks
                 target_q_values = self.target_critic(next_states, target_actions)
                 
-                # Compute target using Bellman equation
+                # Compute TD targets
                 targets = rewards + self.discount_factor * (1 - dones) * target_q_values
                 
-                # Compute critic loss
+                # Compute current Q values
                 q_values = self.critic(states, actions)
+                
+                # Mean squared TD error
                 critic_loss = tf.reduce_mean(tf.square(targets - q_values))
             
             # Update critic
@@ -375,8 +360,11 @@ class MADDPGAgent(PricingAgent):
             
             # Update actor using policy gradient
             with tf.GradientTape() as tape:
-                actions = self.actor(states)
-                actor_loss = -tf.reduce_mean(self.critic(states, actions))
+                # Get actions from current actor network
+                predicted_actions = self.actor(states)
+                
+                # Calculate loss (maximize Q value)
+                actor_loss = -tf.reduce_mean(self.critic(states, predicted_actions))
             
             actor_gradients = tape.gradient(actor_loss, self.actor.trainable_variables)
             self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
@@ -384,15 +372,28 @@ class MADDPGAgent(PricingAgent):
             # Update target networks
             self.update_target_networks()
             
-            # print("Learning complete!")
+            # Record losses if in debug mode
+            if self.debug_mode:
+                self.actor_losses.append(float(actor_loss))
+                self.critic_losses.append(float(critic_loss))
+                
+                # Print learning progress periodically
+                if len(self.actor_losses) % 10 == 0:  # Every 10 updates
+                    print(f"\nTraining step {len(self.actor_losses)}:")
+                    print(f"  Actor Loss: {float(actor_loss):.6f}")
+                    print(f"  Critic Loss: {float(critic_loss):.6f}")
+                    print(f"  Current exploration noise: {self.exploration_noise:.3f}")
+                    if len(self.actions_before_noise) > 0 and len(self.actions_after_noise) > 0:
+                        print(f"  Recent action (before noise): {self.actions_before_noise[-1]:.3f}")
+                        print(f"  Recent action (after noise): {self.actions_after_noise[-1]:.3f}")
+        
         except Exception as e:
-            # print(f"ERROR in learn_from_experiences(): {e}")
+            print(f"ERROR in learn_from_experiences(): {e}")
             import traceback
             traceback.print_exc()
-            # Continue without raising to prevent simulation from stopping
     
     def set_price(self, product_name, new_price):
-        if product_name in self.products:
+        if (product_name in self.products):
             current_price = self.products[product_name].price
             
             # Apply temporal smoothing - only move partially toward target price
@@ -414,6 +415,30 @@ class MADDPGAgent(PricingAgent):
             self.products[product_name].price_history.append(final_price)
             return True
         return False
+    
+    def scale_action_to_price(self, action_value, product):
+        """
+        Convert a continuous action value [-1, 1] to a price change,
+        then apply it to get the new price.
+        """
+        # Convert action from [-1, 1] to price change percentage
+        # Mapping: -1 -> -25%, 0 -> 0%, 1 -> +25%
+        price_change_pct = action_value * 0.25  # -0.25 to +0.25
+        
+        # Get current price
+        current_price = product.price
+        
+        # Calculate new price
+        new_price = current_price * (1 + price_change_pct)
+        
+        # Ensure price stays within reasonable bounds (e.g., at least 5% above cost)
+        min_price = product.cost * 1.05
+        max_price = product.cost * 3.0  # Maximum 200% markup as a safeguard
+        
+        # Clip to range
+        new_price = max(min_price, min(new_price, max_price))
+        
+        return new_price
     
     def save(self, path='maddpg_models'):
         """Save the trained models"""
