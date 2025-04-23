@@ -103,6 +103,35 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                     print("Setting debug mode for MADDPG agent...")
                     maddpg_agent.debug_mode = True
                     agents.append(maddpg_agent)
+                elif current_agent_type == "madqn":
+                    print("Creating MADQN agent...")
+                    madqn_agent = MADQNAgent(
+                        f"Agent{i+1}", 
+                        product_portfolios[i],
+                        learning_rate=0.001,
+                        discount_factor=0.95,
+                        exploration_rate=max(0.1, 0.5 * np.exp(-episode/15)),
+                        exploration_decay=0.995,
+                        min_exploration=0.05,
+                        batch_size=64,
+                        update_target_every=5
+                    )
+                    agents.append(madqn_agent)
+                elif current_agent_type == "qmix":
+                    print("Creating QMIX agent...")
+                    qmix_agent = QMIXAgent(
+                        f"Agent{i+1}", 
+                        product_portfolios[i],
+                        learning_rate=0.001,
+                        discount_factor=0.95,
+                        exploration_rate=max(0.1, 0.5 * np.exp(-episode/15)),
+                        exploration_decay=0.995,
+                        min_exploration=0.05,
+                        batch_size=64,
+                        update_target_every=5,
+                        num_agents=4
+                    )
+                    agents.append(qmix_agent)
                 elif current_agent_type == "random":
                     print("Creating random agent...")
                     agents.append(RandomPricingAgent(f"Agent{i+1}", product_portfolios[i]))

@@ -12,6 +12,7 @@ def run_experiment_batch():
     
     # Define the experimental configurations
     configurations = [
+        # Original MADDPG configurations
         {
             "name": "Config A - One MADDPG",
             "description": "1 MADDPG agent with 3 rule-based agents",
@@ -34,8 +35,46 @@ def run_experiment_batch():
             "name": "Config D - All MADDPG",
             "description": "All 4 agents using MADDPG",
             "agent_types": ["maddpg", "maddpg", "maddpg", "maddpg"],
-            "rule_strategy": "competitor_match"  # Not used but included for consistency
+            "rule_strategy": "competitor_match"
         },
+        
+        # New MADQN configurations
+        {
+            "name": "Config G - One MADQN",
+            "description": "1 MADQN agent with 3 rule-based agents",
+            "agent_types": ["madqn", "rule", "rule", "rule"],
+            "rule_strategy": "competitor_match"
+        },
+        {
+            "name": "Config H - All MADQN",
+            "description": "All 4 agents using MADQN",
+            "agent_types": ["madqn", "madqn", "madqn", "madqn"],
+            "rule_strategy": "competitor_match"
+        },
+        
+        # New QMIX configurations
+        {
+            "name": "Config I - One QMIX",
+            "description": "1 QMIX agent with 3 rule-based agents",
+            "agent_types": ["qmix", "rule", "rule", "rule"],
+            "rule_strategy": "competitor_match"
+        },
+        {
+            "name": "Config J - All QMIX",
+            "description": "All 4 agents using QMIX",
+            "agent_types": ["qmix", "qmix", "qmix", "qmix"],
+            "rule_strategy": "competitor_match"
+        },
+        
+        # Mixed RL configurations
+        {
+            "name": "Config K - RL Competition",
+            "description": "MADDPG vs MADQN vs QMIX vs Rule-Based",
+            "agent_types": ["maddpg", "madqn", "qmix", "rule"],
+            "rule_strategy": "competitor_match"
+        },
+        
+        # Baseline configurations
         {
             "name": "Config E - All Rule-Based",
             "description": "All 4 agents using rule-based strategy",
@@ -46,7 +85,7 @@ def run_experiment_batch():
             "name": "Config F - All Random",
             "description": "All 4 agents using random pricing",
             "agent_types": ["random", "random", "random", "random"],
-            "rule_strategy": "competitor_match"  # Not used but included for consistency
+            "rule_strategy": "competitor_match"
         }
     ]
     
@@ -75,8 +114,8 @@ def run_experiment_batch():
             episode_returns, metrics = run_experiment(
                 config["agent_types"],
                 config["rule_strategy"],
-                weeks=52,       # Adjust as needed
-                episodes=10,     # Adjust as needed
+                weeks=104,       # Adjust as needed
+                episodes=20,     # Adjust as needed
                 save_dir=config_dir
             )
             
@@ -208,13 +247,23 @@ def create_comparative_visuals(all_results, results_dir):
             agent_types = {"Agent1": "MADDPG", "Agent2": "MADDPG", "Agent3": "MADDPG", "Agent4": "Rule-Based"}
         elif "All MADDPG" in config_name:
             agent_types = {"Agent1": "MADDPG", "Agent2": "MADDPG", "Agent3": "MADDPG", "Agent4": "MADDPG"}
+        elif "One MADQN" in config_name:
+            agent_types = {"Agent1": "MADQN", "Agent2": "Rule-Based", "Agent3": "Rule-Based", "Agent4": "Rule-Based"}
+        elif "All MADQN" in config_name:
+            agent_types = {"Agent1": "MADQN", "Agent2": "MADQN", "Agent3": "MADQN", "Agent4": "MADQN"}
+        elif "One QMIX" in config_name:
+            agent_types = {"Agent1": "QMIX", "Agent2": "Rule-Based", "Agent3": "Rule-Based", "Agent4": "Rule-Based"}
+        elif "All QMIX" in config_name:
+            agent_types = {"Agent1": "QMIX", "Agent2": "QMIX", "Agent3": "QMIX", "Agent4": "QMIX"}
+        elif "RL Competition" in config_name:
+            agent_types = {"Agent1": "MADDPG", "Agent2": "MADQN", "Agent3": "QMIX", "Agent4": "Rule-Based"}
         elif "All Rule-Based" in config_name:
             agent_types = {"Agent1": "Rule-Based", "Agent2": "Rule-Based", "Agent3": "Rule-Based", "Agent4": "Rule-Based"}
         elif "All Random" in config_name:
             agent_types = {"Agent1": "Random", "Agent2": "Random", "Agent3": "Random", "Agent4": "Random"}
         
         # Group by agent type
-        type_returns = {"MADDPG": [], "Rule-Based": [], "Random": []}
+        type_returns = {"MADDPG": [], "MADQN": [], "QMIX": [], "Rule-Based": [], "Random": []}
         
         for agent_id, returns in result["returns"].items():
             if returns:  # Make sure there's data

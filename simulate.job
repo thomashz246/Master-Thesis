@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --partition=rome        # Use 'rome' partition which has available nodes
 #SBATCH --gpus=0               # No GPU needed
-#SBATCH --job-name=PriceSimJob # More descriptive job name
+#SBATCH --job-name=RunExperiments # More descriptive job name
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4      # Reduced from 9 since your sim is single-threaded
-#SBATCH --time=06:00:00        # Reduced time based on likely duration
+#SBATCH --time=10:00:00        # Reduced time based on likely duration
 #SBATCH --output=logs/%j.log   # Same log location
 #SBATCH --mem=8G               # Explicitly request memory
 
@@ -23,4 +23,4 @@ pip install --user wrapt numpy h5py tensorboard keras-preprocessing requests
 cd $HOME/thesis/Online\ Retail/
 
 # Launch Python code with optimization flags
-srun python -O simulate.py
+srun python -O run_experiments.py
