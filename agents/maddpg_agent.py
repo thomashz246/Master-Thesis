@@ -392,6 +392,83 @@ class MADDPGAgent(PricingAgent):
             import traceback
             traceback.print_exc()
     
+    def learn_from_joint_experience(self, joint_states, joint_actions, own_reward, joint_next_states, dones, all_agents):
+        """Learn using joint states/actions from all agents"""
+        try:
+            batch_size = joint_states.shape[0]
+            
+            # Flatten states/actions for critic input
+            joint_states_flat = np.reshape(joint_states, (batch_size, -1))
+            joint_actions_flat = np.reshape(joint_actions, (batch_size, -1))
+            joint_next_states_flat = np.reshape(joint_next_states, (batch_size, -1))
+            
+            # Convert to tensors
+            joint_states_tensor = tf.convert_to_tensor(joint_states_flat, dtype=tf.float32)
+            joint_actions_tensor = tf.convert_to_tensor(joint_actions_flat, dtype=tf.float32)
+            own_reward_tensor = tf.convert_to_tensor(own_reward, dtype=tf.float32)
+            joint_next_states_tensor = tf.convert_to_tensor(joint_next_states_flat, dtype=tf.float32)
+            dones_tensor = tf.convert_to_tensor(dones, dtype=tf.float32)
+            
+            # Get next actions from all agents' target policies
+            next_actions = []
+            for i, target_agent in enumerate(all_agents):
+                agent_next_states = joint_next_states[:, i]
+                agent_next_action = target_agent.target_actor(tf.convert_to_tensor(agent_next_states, dtype=tf.float32))
+                next_actions.append(agent_next_action)
+            
+            # Combine next actions from all agents
+            joint_next_actions_flat = tf.concat(next_actions, axis=1)
+            
+            # Train critic
+            with tf.GradientTape() as tape:
+                # Get target Q value
+                target_q = self.target_critic(joint_next_states_tensor, joint_next_actions_flat)
+                
+                # Compute target using Bellman equation
+                y = own_reward_tensor + self.discount_factor * (1 - dones_tensor) * target_q
+                
+                # Compute critic loss
+                q_value = self.critic(joint_states_tensor, joint_actions_tensor)
+                critic_loss = tf.reduce_mean(tf.square(y - q_value))
+            
+            # Apply critic gradients
+            critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
+            self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+            
+            # Train actor
+            with tf.GradientTape() as tape:
+                # Get this agent's action
+                my_idx = all_agents.index(self)
+                my_state = joint_states[:, my_idx]
+                my_actions = self.actor(tf.convert_to_tensor(my_state, dtype=tf.float32))
+                
+                # Create updated joint action with this agent's new action
+                actions_updated = joint_actions.copy()
+                actions_updated[:, my_idx] = my_actions.numpy()
+                actions_updated_flat = np.reshape(actions_updated, (batch_size, -1))
+                
+                # Compute actor loss (negative of Q value)
+                actor_loss = -tf.reduce_mean(
+                    self.critic(joint_states_tensor, tf.convert_to_tensor(actions_updated_flat, dtype=tf.float32))
+                )
+            
+            # Apply actor gradients
+            actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
+            self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+            
+            # Update target networks
+            self.update_target_networks()
+            
+            # Record losses if in debug mode
+            if self.debug_mode:
+                self.actor_losses.append(float(actor_loss))
+                self.critic_losses.append(float(critic_loss))
+        
+        except Exception as e:
+            print(f"Error in learn_from_joint_experience for {self.agent_id}: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def set_price(self, product_name, new_price):
         if (product_name in self.products):
             current_price = self.products[product_name].price

@@ -2,6 +2,7 @@ import os
 import sys
 import tensorflow as tf
 from evaluation.eval_metrics import *
+from agents.maddpg_coordinator import MADDPGCoordinator, JointReplayBuffer
 
 # Redirect stderr to nowhere (suppresses all stderr warnings)
 old_stderr = sys.stderr
@@ -116,6 +117,13 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         
         print(f"Created {len(agents)} agents")
         
+        # Create the coordinator
+        maddpg_agents = [agent for agent in agents if isinstance(agent, MADDPGAgent)]
+        coordinator = None
+        if maddpg_agents and agent_type == "maddpg":
+            coordinator = MADDPGCoordinator(maddpg_agents)
+            print(f"Created MADDPG coordinator for {len(maddpg_agents)} agents")
+        
         # Create market environment
         print("Initializing market environment...")
         model_path = os.path.join(os.path.dirname(__file__), "models/lgbm_model.pkl")
@@ -130,24 +138,78 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         try:
             for week in range(weeks):
                 print(f"Episode {episode+1}/{episodes}, Week {week+1}/{weeks}", end='\r')
+                
                 # Store previous week prices for comparison
                 previous_prices = {}
                 for agent in agents:
                     for product_name, product in agent.products.items():
                         previous_prices[f"{agent.agent_id}_{product_name}"] = product.price
                 
+                # Get market observations
+                market_observations = market.get_market_observations()
+                
+                # Collect joint states if using coordinator
+                if coordinator:
+                    joint_states = []
+                    for agent in maddpg_agents:
+                        state = agent.get_state_representation(list(agent.products.keys())[0], market_observations)
+                        joint_states.append(state)
+                    
+                    # Store current joint states for later
+                    current_joint_states = np.array(joint_states)
+                
+                # Let all agents act
+                for agent in agents:
+                    agent.act(market.current_week, market.current_year, market.is_holiday_season, market_observations)
+                
+                # Collect actions from MADDPG agents
+                if coordinator:
+                    joint_actions = []
+                    for agent in maddpg_agents:
+                        if hasattr(agent, 'previous_action'):
+                            joint_actions.append(agent.previous_action)
+                        else:
+                            # Default action if not available
+                            joint_actions.append(np.zeros((1,), dtype=np.float32))
+                    
+                    current_joint_actions = np.array(joint_actions)
+                
+                # Step the environment
                 demands, revenues = market.step()
                 
-                # Add this after the market step to trigger learning
-                # Call learn_from_experiences for the MADDPG agent
-                if i == 0 and hasattr(agents[0], 'learn_from_experiences'):
-                    agents[0].learn_from_experiences()
-                
-                # Print current state (less frequently to reduce output volume)
+                # Print weekly revenues (add this section)
                 if week % 1 == 0:
-                    print(f"Week {market.current_week}, Year {market.current_year}")
-                    for agent_id in episode_returns.keys():
-                        print(f"{agent_id} Revenue: ${revenues[agent_id]:.2f}")
+                    print(f"Week {week+1}, Revenues:")
+                    for agent_id, revenue in revenues.items():
+                        print(f"  {agent_id}: ${revenue:.2f}")
+
+                # If we have a coordinator, get next states and store the transition
+                if coordinator:
+                    # Get next observations
+                    next_market_observations = market.get_market_observations()
+                    
+                    # Get next states and rewards
+                    next_joint_states = []
+                    joint_rewards = []
+                    
+                    for agent in maddpg_agents:
+                        next_state = agent.get_state_representation(list(agent.products.keys())[0], next_market_observations)
+                        next_joint_states.append(next_state)
+                        
+                        # Use revenue as reward
+                        reward = revenues.get(agent.agent_id, 0)
+                        joint_rewards.append(reward)
+                    
+                    # Store transition in the coordinator and train
+                    joint_rewards_array = np.array(joint_rewards).reshape(-1, 1)
+                    coordinator.store_transition(
+                        current_joint_states,
+                        current_joint_actions,
+                        joint_rewards_array,
+                        np.array(next_joint_states),
+                        False  # done flag
+                    )
+                    coordinator.learn()
                 
                 # Track prices for competing products
                 price_data = {
@@ -267,8 +329,8 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     if agent_type in ["maddpg", "madqn", "qmix"]:
         print(f"Saving {agent_type.upper()} models...")
         try:
-            for agent in agents:
-                if i == 0:  # Only save the first agent which is MADDPG
+            for idx, agent in enumerate(agents):
+                if isinstance(agent, MADDPGAgent):  # Check agent type directly
                     print(f"Saving model for {agent.agent_id}...")
                     agent.save()
             print("All models saved successfully")
