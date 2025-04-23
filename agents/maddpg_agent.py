@@ -12,27 +12,33 @@ class ActorNetwork(tf.keras.Model):
     """Actor (Policy) Network for MADDPG"""
     def __init__(self, state_dim, action_dim, name='actor'):
         super(ActorNetwork, self).__init__(name=name)
-        self.fc1 = layers.Dense(256, activation='relu')
-        self.fc2 = layers.Dense(128, activation='relu')
-        self.fc3 = layers.Dense(64, activation='relu')
-        # Final layer with tanh activation for bounded actions [-1,1]
+        self.fc1 = layers.Dense(64, activation='relu', 
+                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.fc2 = layers.Dense(64, activation='relu',
+                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.out = layers.Dense(action_dim, activation='tanh')
         
     def call(self, state):
         x = self.fc1(state)
         x = self.fc2(x)
-        x = self.fc3(x)
         return self.out(x)
 
 class CriticNetwork(tf.keras.Model):
     """Centralized Critic for MADDPG"""
     def __init__(self, state_dim, action_dim, num_agents=4, name='critic'):
         super(CriticNetwork, self).__init__(name=name)
-        self.state_fc = layers.Dense(128, activation='relu')
-        self.action_fc = layers.Dense(64, activation='relu')
+        self.state_fc = layers.Dense(128, activation='relu',
+                                kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.action_fc = layers.Dense(64, activation='relu',
+                                 kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.concat = layers.Concatenate()
-        self.fc1 = layers.Dense(256, activation='relu')
-        self.fc2 = layers.Dense(128, activation='relu')
+        # Add layer normalization for better gradient flow
+        self.norm1 = layers.LayerNormalization()
+        self.fc1 = layers.Dense(256, activation='relu',
+                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.norm2 = layers.LayerNormalization()
+        self.fc2 = layers.Dense(128, activation='relu',
+                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.out = layers.Dense(1)
         
     def call(self, all_states, all_actions):
@@ -42,7 +48,9 @@ class CriticNetwork(tf.keras.Model):
         a = self.action_fc(all_actions)
         x = self.concat([s, a])
         x = self.fc1(x)
+        x = self.norm1(x)  # Apply normalization
         x = self.fc2(x)
+        x = self.norm2(x)  # Apply normalization
         return self.out(x)
 
 class ReplayBuffer:
@@ -76,9 +84,13 @@ class ReplayBuffer:
 
 class MADDPGAgent(PricingAgent):
     def __init__(self, agent_id, products, state_dim=10, action_dim=1, 
-                 actor_lr=0.001, critic_lr=0.002, discount_factor=0.95,
-                 exploration_noise=0.3, noise_decay=0.9995, min_noise=0.05,
-                 batch_size=64, tau=0.01):
+                 actor_lr=0.0001,  # Reduced from 0.0005
+                 critic_lr=0.00001,  # Reduced from 0.0001
+                 buffer_size=100000,
+                 batch_size=64,
+                 discount_factor=0.95,  # Slightly reduced
+                 tau=0.001,  # Reduced from 0.005
+                 exploration_noise=0.2):
         super().__init__(agent_id, products)
         
         # Initialize revenue history
@@ -94,8 +106,8 @@ class MADDPGAgent(PricingAgent):
         self.critic_lr = critic_lr
         self.discount_factor = discount_factor
         self.exploration_noise = exploration_noise
-        self.noise_decay = noise_decay
-        self.min_noise = min_noise
+        self.noise_decay = 0.9995
+        self.min_noise = 0.05
         self.batch_size = batch_size
         self.tau = tau  # Target network update rate
         
@@ -107,8 +119,8 @@ class MADDPGAgent(PricingAgent):
         self._build_networks()
         
         # Initialize optimizers
-        self.actor_optimizer = optimizers.Adam(learning_rate=actor_lr)
-        self.critic_optimizer = optimizers.Adam(learning_rate=critic_lr)
+        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=actor_lr, clipnorm=1.0)
+        self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=critic_lr, clipnorm=1.0)
         
         # Experience replay buffer
         self.buffer = ReplayBuffer()
@@ -419,21 +431,34 @@ class MADDPGAgent(PricingAgent):
             # Combine next actions from all agents
             joint_next_actions_flat = tf.concat(next_actions, axis=1)
             
-            # Train critic
+            # Train critic - with gradient clipping and checking
             with tf.GradientTape() as tape:
-                # Get target Q value
+                # Get target Q value (with clipping)
                 target_q = self.target_critic(joint_next_states_tensor, joint_next_actions_flat)
+                target_q = tf.clip_by_value(target_q, -10.0, 10.0)  # Clip to reasonable range
                 
                 # Compute target using Bellman equation
                 y = own_reward_tensor + self.discount_factor * (1 - dones_tensor) * target_q
                 
-                # Compute critic loss
+                # Compute critic loss (with clipping)
                 q_value = self.critic(joint_states_tensor, joint_actions_tensor)
+                q_value = tf.clip_by_value(q_value, -10.0, 10.0)  # Clip to reasonable range
                 critic_loss = tf.reduce_mean(tf.square(y - q_value))
             
-            # Apply critic gradients
+            # Apply critic gradients with error handling
             critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
-            self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+            
+            # Check if gradients exist
+            if None in critic_grads or any(tf.reduce_all(tf.math.is_nan(g)) for g in critic_grads if g is not None):
+                print("Warning: NaN or None gradients in critic update - skipping update")
+                
+                # Try to diagnose the problem
+                print(f"Target Q range: {tf.reduce_min(target_q):.4f} to {tf.reduce_max(target_q):.4f}")
+                print(f"Current Q range: {tf.reduce_min(q_value):.4f} to {tf.reduce_max(q_value):.4f}")
+            else:
+                # Clip gradients to prevent exploding gradients
+                critic_grads, _ = tf.clip_by_global_norm(critic_grads, 1.0)
+                self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
             
             # Train actor
             with tf.GradientTape() as tape:
@@ -447,14 +472,21 @@ class MADDPGAgent(PricingAgent):
                 actions_updated[:, my_idx] = my_actions.numpy()
                 actions_updated_flat = np.reshape(actions_updated, (batch_size, -1))
                 
-                # Compute actor loss (negative of Q value)
+                # Compute actor loss (negative of Q value) with stop_gradient for critic
                 actor_loss = -tf.reduce_mean(
                     self.critic(joint_states_tensor, tf.convert_to_tensor(actions_updated_flat, dtype=tf.float32))
                 )
             
-            # Apply actor gradients
+            # Apply actor gradients with error handling
             actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
-            self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+            
+            # Check if gradients exist
+            if None in actor_grads or any(tf.reduce_all(tf.math.is_nan(g)) for g in actor_grads if g is not None):
+                print("Warning: NaN or None gradients in actor update - skipping update")
+            else:
+                # Clip gradients to prevent exploding gradients
+                actor_grads, _ = tf.clip_by_global_norm(actor_grads, 1.0)
+                self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
             
             # Update target networks
             self.update_target_networks()

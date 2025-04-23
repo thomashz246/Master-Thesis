@@ -179,7 +179,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
                 
                 # Print weekly revenues (add this section)
                 if week % 1 == 0:
-                    print(f"Week {week+1}, Revenues:")
+                    print(f"Week {week+1}")
                     for agent_id, revenue in revenues.items():
                         print(f"  {agent_id}: ${revenue:.2f}")
 
@@ -197,7 +197,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
                         next_joint_states.append(next_state)
                         
                         # Use revenue as reward
-                        reward = revenues.get(agent.agent_id, 0)
+                        reward = revenues.get(agent.agent_id, 0) / 1000.0 # Scale down by 1000
                         joint_rewards.append(reward)
                     
                     # Store transition in the coordinator and train

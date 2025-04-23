@@ -74,6 +74,11 @@ class MADDPGCoordinator:
         if self.buffer.size() < self.batch_size:
             return
         
+        # Only train every 4 steps to stabilize learning
+        if self.training_step % 4 != 0:
+            self.training_step += 1
+            return
+        
         try:
             # Sample batch of joint experiences
             joint_states_batch, joint_actions_batch, rewards_batch, joint_next_states_batch, dones_batch = self.buffer.sample(self.batch_size)
