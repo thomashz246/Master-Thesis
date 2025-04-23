@@ -1,0 +1,8 @@
+,Agent1_PremiumA1_Price,Agent1_PremiumA2_Price,Agent1_PremiumA3_Price,Agent1_PremiumA4_Price,Agent1_LuxuryA5_Price,Agent2_PremiumA1_Price,Agent2_PremiumA2_Price,Agent2_PremiumA3_Price,Agent2_PremiumA4_Price,Agent2_LuxuryA5_Price,Agent3_PremiumA1_Price,Agent3_PremiumA2_Price,Agent3_PremiumA3_Price,Agent3_PremiumA4_Price,Agent3_LuxuryA5_Price,Agent4_PremiumA1_Price,Agent4_PremiumA2_Price,Agent4_PremiumA3_Price,Agent4_PremiumA4_Price,Agent4_LuxuryA5_Price,Agent1,Agent2,Agent3,Agent4,nash_overall,Agent1_revenue_share,Agent2_revenue_share,Agent3_revenue_share,Agent4_revenue_share,price_coefficient_variation,price_convergence,total_revenue,gini_coefficient,fairness,social_welfare
+price_stability,0.5115899453133053,0.1904069013649372,0.0,0.617705206126422,0.0,0.6158212574653112,0.0,0.1137639684554822,0.4261505649219607,0.46602542360761146,0.0,0.2967888835397655,0.1162849476382708,0.3494667383194475,0.3464141795986564,0.5288552675827107,0.0,0.18946807890408113,0.06708102549697337,0.4087371309122283,,,,,,,,,,,,,,,
+nash_equilibrium,,,,,,,,,,,,,,,,,,,,,0.30981390905331374,0.3450268339429161,0.3153562968155794,0.2952189870828339,,,,,,,,,,,
+overall,,,,,,,,,,,,,,,,,,,,,,,,,0.31635400672366076,,,,,,,,,,
+optimality_gap,,,,,,,,,,,,,,,,,,,,,0.490013272340844,0.4871366707712082,0.35397583482475287,0.679198644005053,,,,,,,,,,,
+price_revenue_elasticity,,,,,,,,,,,,,,,,,,,,,-0.26084011473371194,0.5334599075318163,0.5168812895258426,-0.10580344864641092,,,,,,,,,,,
+global_vs_individual,,,,,,,,,,,,,,,,,,,,,,,,,,0.25215696862151854,0.236173519076674,0.3180640927333669,0.19360541956844057,0.09375566009649074,0.9062443399035093,,,,
+social_welfare,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,144299.04542211175,0.09733986725990587,0.9026601327400942,130252.99549499227
