@@ -28,11 +28,16 @@ import seaborn as sns
 import os
 import numpy as np
 
-def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
+def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg", 
+                  agent_types=None, rule_strategy="competitor_match", save_dir=None):
     """Run multiple episodes of simulation for learning"""
     print("Starting simulation...")
     # Track agent learning performance across episodes
     episode_returns = {f'Agent{i}': [] for i in range(1, num_agents+1)}
+    
+    # Use agent_types configuration if provided
+    if agent_types and agent_type == "custom":
+        print(f"Using custom agent configuration: {agent_types}")
     
     for episode in range(episodes):
         print(f"\n=== Episode {episode+1}/{episodes} ===")
@@ -78,37 +83,42 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         # Create agents with different strategies/parameters
         agents = []
         try:
-            for i in range(num_agents):
+            for i in range(min(num_agents, len(product_portfolios))):
                 print(f"Creating agent {i+1}...")
-                if i < len(product_portfolios):  # Make sure we have a portfolio for this agent
-                    if i == 0:  # First agent is MADDPG
-                        print("Creating MADDPG agent...")
-                        maddpg_agent = MADDPGAgent(
+                # Determine agent type for this position
+                current_agent_type = agent_types[i] if agent_types else agent_type if i == 0 else "rule"
+                
+                if current_agent_type == "maddpg":
+                    print("Creating MADDPG agent...")
+                    maddpg_agent = MADDPGAgent(
+                        f"Agent{i+1}", 
+                        product_portfolios[i],
+                        actor_lr=0.0001,  # Reduced from 0.0005
+                        critic_lr=0.00001,  # Reduced from 0.0001
+                        discount_factor=0.95,  # Slightly reduced
+                        tau=0.001,   # Slower target updates
+                        exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
+                    )
+                    # Enable debugging/tracking for this agent
+                    print("Setting debug mode for MADDPG agent...")
+                    maddpg_agent.debug_mode = True
+                    agents.append(maddpg_agent)
+                elif current_agent_type == "random":
+                    print("Creating random agent...")
+                    agents.append(RandomPricingAgent(f"Agent{i+1}", product_portfolios[i]))
+                else:  # Rule-based agent
+                    print(f"Creating rule-based agent with strategy: {rule_strategy}")
+                    agents.append(
+                        RuleBasedAgent(
                             f"Agent{i+1}", 
                             product_portfolios[i],
-                            actor_lr=0.0005,
-                            critic_lr=0.0001,
-                            discount_factor=0.98,
-                            tau=0.005,
-                            exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
+                            strategy=rule_strategy,
+                            markup_pct=0.20,
+                            undercut_pct=0.05,
+                            demand_threshold=0.10,
+                            seasonal_boost=0.15
                         )
-                        # Enable debugging/tracking for this agent
-                        print("Setting debug mode for MADDPG agent...")
-                        maddpg_agent.debug_mode = True
-                        agents.append(maddpg_agent)
-                    else:  # Other agents are rule-based
-                        print(f"Creating rule-based agent with strategy: {rule_strategy}")
-                        agents.append(
-                            RuleBasedAgent(
-                                f"Agent{i+1}", 
-                                product_portfolios[i],
-                                strategy=rule_strategy,
-                                markup_pct=0.20,
-                                undercut_pct=0.05,
-                                demand_threshold=0.10,
-                                seasonal_boost=0.15
-                            )
-                        )
+                    )
         except Exception as e:
             print(f"ERROR creating agents: {e}")
             import traceback
@@ -281,7 +291,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             plt.title(f'Weekly Revenue by Agent (Episode {episode+1})')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.savefig(f"simulation_results_revenue_ep{episode+1}.png")
+            if save_dir:
+                plt.savefig(f"{save_dir}/simulation_results_revenue_ep{episode+1}.png")
+            else:
+                plt.savefig(f"simulation_results_revenue_ep{episode+1}.png")
             # Plot price competition for products in the same category
             plt.figure(figsize=(12, 6))
             price_columns = [col for col in price_df.columns if 'Price' in col]
@@ -292,7 +305,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             plt.title(f'Price Competition (Episode {episode+1})')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.savefig(f"simulation_results_prices_ep{episode+1}.png")
+            if save_dir:
+                plt.savefig(f"{save_dir}/simulation_results_prices_ep{episode+1}.png")
+            else:
+                plt.savefig(f"simulation_results_prices_ep{episode+1}.png")
             
             # Create visualization for price changes
             # Option 1: Heatmap of price changes
@@ -305,7 +321,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             sns.heatmap(pivoted, cmap="RdBu_r", center=0, vmin=-10, vmax=10)
             plt.title('Price Changes by Week (%)')
             plt.tight_layout()
-            plt.savefig(f"price_changes_heatmap_ep{episode+1}.png")
+            if save_dir:
+                plt.savefig(f"{save_dir}/price_changes_heatmap_ep{episode+1}.png")
+            else:
+                plt.savefig(f"price_changes_heatmap_ep{episode+1}.png")
             
             # Option 2: Significant price changes as scatter plot
             plt.figure(figsize=(14, 6))
@@ -323,7 +342,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
             plt.title('Significant Price Changes (>2%)')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.savefig(f"significant_price_changes_ep{episode+1}.png")
+            if save_dir:
+                plt.savefig(f"{save_dir}/significant_price_changes_ep{episode+1}.png")
+            else:
+                plt.savefig(f"significant_price_changes_ep{episode+1}.png")
     
     # Save the trained models - don't attempt to save RandomPricingAgent
     if agent_type in ["maddpg", "madqn", "qmix"]:
@@ -348,7 +370,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
     plt.title('Learning Progress Across Episodes')
     plt.legend()
     plt.grid(True, alpha=0.3)
-    plt.savefig("learning_progress.png")
+    if save_dir:
+        plt.savefig(f"{save_dir}/learning_progress.png")
+    else:
+        plt.savefig("learning_progress.png")
 
     # At the end of simulation
     # Create final metrics for evaluation
@@ -492,7 +517,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg"):
         plt.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig("maddpg_learning_metrics.png")
+        if save_dir:
+            plt.savefig(f"{save_dir}/maddpg_learning_metrics.png")
+        else:
+            plt.savefig("maddpg_learning_metrics.png")
         print("Saved MADDPG learning metrics visualization to maddpg_learning_metrics.png")
     
     return episode_returns, final_metrics
