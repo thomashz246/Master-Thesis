@@ -40,13 +40,13 @@ def run_experiment_batch():
         
         # New MADQN configurations
         {
-            "name": "Config G - One MADQN",
+            "name": "Config E - One MADQN",
             "description": "1 MADQN agent with 3 rule-based agents",
             "agent_types": ["madqn", "rule", "rule", "rule"],
             "rule_strategy": "competitor_match"
         },
         {
-            "name": "Config H - All MADQN",
+            "name": "Config F - All MADQN",
             "description": "All 4 agents using MADQN",
             "agent_types": ["madqn", "madqn", "madqn", "madqn"],
             "rule_strategy": "competitor_match"
@@ -54,13 +54,13 @@ def run_experiment_batch():
         
         # New QMIX configurations
         {
-            "name": "Config I - One QMIX",
+            "name": "Config G - One QMIX",
             "description": "1 QMIX agent with 3 rule-based agents",
             "agent_types": ["qmix", "rule", "rule", "rule"],
             "rule_strategy": "competitor_match"
         },
         {
-            "name": "Config J - All QMIX",
+            "name": "Config H - All QMIX",
             "description": "All 4 agents using QMIX",
             "agent_types": ["qmix", "qmix", "qmix", "qmix"],
             "rule_strategy": "competitor_match"
@@ -68,7 +68,7 @@ def run_experiment_batch():
         
         # Mixed RL configurations
         {
-            "name": "Config K - RL Competition",
+            "name": "Config I - RL Competition",
             "description": "MADDPG vs MADQN vs QMIX vs Rule-Based",
             "agent_types": ["maddpg", "madqn", "qmix", "rule"],
             "rule_strategy": "competitor_match"
@@ -76,13 +76,13 @@ def run_experiment_batch():
         
         # Baseline configurations
         {
-            "name": "Config E - All Rule-Based",
+            "name": "Config J - All Rule-Based",
             "description": "All 4 agents using rule-based strategy",
             "agent_types": ["rule", "rule", "rule", "rule"],
             "rule_strategy": "competitor_match"
         },
         {
-            "name": "Config F - All Random",
+            "name": "Config K - All Random",
             "description": "All 4 agents using random pricing",
             "agent_types": ["random", "random", "random", "random"],
             "rule_strategy": "competitor_match"
