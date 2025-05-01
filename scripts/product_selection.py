@@ -10,7 +10,7 @@ os.makedirs('images', exist_ok=True)
 
 # Load and prepare data
 print("Loading data...")
-df = pd.read_csv("online_retail_II.csv", encoding='latin1')
+df = pd.read_csv("../data/online_retail_II.csv", encoding='latin1')
 df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
 
 # Filter for valid data, FOCUS ON CUSTOMERS WITH ID
@@ -94,15 +94,46 @@ def analyze_product_demand(stockcode, description):
         
         # Plot demand curve
         plt.figure(figsize=(12, 7))
-        plt.scatter(daily_filtered['Price'], daily_filtered['Quantity'], 
-                   alpha=0.6, 
-                   label='Daily Sales',
-                   color='blue')
         
+        # Plot the raw data points
+        plt.scatter(daily_filtered['Price'], daily_filtered['Quantity'], 
+                   alpha=0.5, 
+                   color='gray',
+                   label='Daily Sales')
+        
+        # Plot LOWESS curve
         plt.plot(smoothed_prices, smoothed_quantities, 
-               color='darkblue', 
+               color='blue', 
                linewidth=2, 
-               label='Demand Curve')
+               label='LOWESS')
+        
+        # Add linear regression
+        x = daily_filtered['Price'].values.reshape(-1, 1)
+        y = daily_filtered['Quantity'].values
+        
+        # Linear regression
+        linear_model = sm.OLS(y, sm.add_constant(x)).fit()
+        price_range = np.linspace(x.min(), x.max(), 100).reshape(-1, 1)
+        linear_pred = linear_model.predict(sm.add_constant(price_range))
+        
+        plt.plot(price_range, linear_pred, 
+                color='green', 
+                linestyle='--', 
+                linewidth=1.5, 
+                label=f'Linear (R²:{linear_model.rsquared:.2f})')
+        
+        # Polynomial regression (degree=2)
+        poly_features = np.column_stack((x, x**2))
+        poly_model = sm.OLS(y, sm.add_constant(poly_features)).fit()
+        
+        poly_range = np.column_stack((price_range, price_range**2))
+        poly_pred = poly_model.predict(sm.add_constant(poly_range))
+        
+        plt.plot(price_range, poly_pred, 
+                color='red', 
+                linestyle='-.', 
+                linewidth=1.5, 
+                label=f'Polynomial (n=2, R²:{poly_model.rsquared:.2f})')
         
         # Calculate elasticity if possible
         avg_price = daily_filtered['Price'].mean()
@@ -130,7 +161,27 @@ def analyze_product_demand(stockcode, description):
                                 xy=(0.05, 0.88), xycoords='axes fraction',
                                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
         
-        plt.title(f'Demand Curve for {description}\n(Registered Customers - StockCode: {stockcode})')
+        # Get model elasticities for comparison
+        try:
+            # Linear model elasticity at mean price
+            linear_slope = linear_model.params[1]
+            linear_elasticity = linear_slope * (avg_price / avg_quantity)
+            
+            # Polynomial model elasticity at mean price
+            # For polynomial y = a + bx + cx², the derivative is b + 2cx
+            poly_b = poly_model.params[1]
+            poly_c = poly_model.params[2]
+            poly_slope = poly_b + 2 * poly_c * avg_price
+            poly_elasticity = poly_slope * (avg_price / avg_quantity)
+            
+            plt.annotate(f"Linear Model Elasticity: {linear_elasticity:.2f}\nPoly Model Elasticity: {poly_elasticity:.2f}", 
+                        xy=(0.05, 0.80), xycoords='axes fraction',
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8))
+        except:
+            # If calculation fails, just continue without model elasticities
+            pass
+        
+        plt.title(f'Demand Curve for {description} (Registered Customers)\n(StockCode: {stockcode})')
         plt.xlabel('Price (£)')
         plt.ylabel('Quantity Sold')
         plt.grid(True, alpha=0.3)
@@ -138,8 +189,8 @@ def analyze_product_demand(stockcode, description):
         plt.tight_layout()
         
         # Save figure
-        plt.savefig(f'images/demand_curve_{stockcode}_registered.png')
-        print(f"Demand curve saved to images/demand_curve_{stockcode}_registered.png")
+        plt.savefig(f'images/demand_estimation_{stockcode}_registered.png')
+        print(f"Demand curve saved to images/demand_estimation_{stockcode}_registered.png")
         
         # Additional plot: Price over time
         plt.figure(figsize=(12, 7))
@@ -166,7 +217,7 @@ def analyze_product_demand(stockcode, description):
         ax2.tick_params(axis='y', labelcolor=color)
         
         fig.tight_layout()
-        plt.title(f'Price and Quantity Over Time\n{description} (StockCode: {stockcode})')
+        plt.title(f'Price and Quantity Over Time - Registered Customers\n{description} (StockCode: {stockcode})')
         
         # Create combined legend
         lines1, labels1 = ax1.get_legend_handles_labels()
