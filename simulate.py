@@ -29,7 +29,8 @@ import os
 import numpy as np
 
 def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg", 
-                  agent_types=None, rule_strategy="competitor_match", save_dir=None):
+                  agent_types=None, rule_strategy="competitor_match", 
+                  rule_strategies=None, save_dir=None):
     """Run multiple episodes of simulation for learning"""
     print("Starting simulation...")
     # Track agent learning performance across episodes
@@ -39,6 +40,13 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
     if agent_types and agent_type == "custom":
         print(f"Using custom agent configuration: {agent_types}")
     
+    # Use rule_strategies if provided
+    if rule_strategies:
+        print(f"Using multiple rule strategies: {rule_strategies}")
+    else:
+        # Default to using the same strategy for all rule-based agents
+        rule_strategies = [rule_strategy] * num_agents
+        
     for episode in range(episodes):
         print(f"\n=== Episode {episode+1}/{episodes} ===")
         print("Creating product portfolios...")
@@ -136,12 +144,14 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                     print("Creating random agent...")
                     agents.append(RandomPricingAgent(f"Agent{i+1}", product_portfolios[i]))
                 else:  # Rule-based agent
-                    print(f"Creating rule-based agent with strategy: {rule_strategy}")
+                    # Get the appropriate rule strategy for this agent
+                    current_rule_strategy = rule_strategies[i] if i < len(rule_strategies) else rule_strategy
+                    print(f"Creating rule-based agent with strategy: {current_rule_strategy}")
                     agents.append(
                         RuleBasedAgent(
                             f"Agent{i+1}", 
                             product_portfolios[i],
-                            strategy=rule_strategy,
+                            strategy=current_rule_strategy,
                             markup_pct=0.20,
                             undercut_pct=0.05,
                             demand_threshold=0.10,
@@ -375,6 +385,40 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                 plt.savefig(f"{save_dir}/significant_price_changes_ep{episode+1}.png")
             else:
                 plt.savefig(f"significant_price_changes_ep{episode+1}.png")
+            
+            # If all agents are rule-based with different strategies, add a specialized comparison
+            if all(agent_type == "rule" for agent_type in (agent_types if agent_types else ["rule"] * num_agents)) and rule_strategies and len(set(rule_strategies)) > 1:
+                # Create a DataFrame showing agent performance by strategy
+                strategy_performance = []
+                for i, agent in enumerate(agents):
+                    if i < len(rule_strategies):
+                        strategy = rule_strategies[i]
+                    else:
+                        strategy = rule_strategy
+                        
+                    total_revenue = sum(agent.revenue_history)
+                    average_weekly_revenue = total_revenue / weeks
+                    
+                    strategy_performance.append({
+                        'Agent': agent.agent_id,
+                        'Strategy': strategy,
+                        'Total Revenue': total_revenue,
+                        'Average Weekly Revenue': average_weekly_revenue
+                    })
+                
+                # Create DataFrame and plot
+                strategy_df = pd.DataFrame(strategy_performance)
+                
+                plt.figure(figsize=(12, 8))
+                sns.barplot(x='Agent', y='Total Revenue', hue='Strategy', data=strategy_df)
+                plt.title('Revenue by Rule-Based Pricing Strategy')
+                plt.xlabel('Agent')
+                plt.ylabel('Total Revenue')
+                plt.grid(True, alpha=0.3)
+                if save_dir:
+                    plt.savefig(f"{save_dir}/rule_strategy_comparison_ep{episode+1}.png")
+                else:
+                    plt.savefig(f"rule_strategy_comparison_ep{episode+1}.png")
     
     # Save the trained models - don't attempt to save RandomPricingAgent
     if agent_type in ["maddpg", "madqn", "qmix"]:

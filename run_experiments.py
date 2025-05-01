@@ -12,82 +12,37 @@ def run_experiment_batch():
     
     # Define the experimental configurations
     configurations = [
-        # Original MADDPG configurations
-        {
-            "name": "Config A - One MADDPG",
-            "description": "1 MADDPG agent with 3 rule-based agents",
-            "agent_types": ["maddpg", "rule", "rule", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config B - Two MADDPG",
-            "description": "2 MADDPG agents with 2 rule-based agents",
-            "agent_types": ["maddpg", "maddpg", "rule", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config C - Three MADDPG",
-            "description": "3 MADDPG agents with 1 rule-based agent",
-            "agent_types": ["maddpg", "maddpg", "maddpg", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config D - All MADDPG",
-            "description": "All 4 agents using MADDPG",
-            "agent_types": ["maddpg", "maddpg", "maddpg", "maddpg"],
-            "rule_strategy": "competitor_match"
-        },
-        
-        # New MADQN configurations
-        {
-            "name": "Config E - One MADQN",
-            "description": "1 MADQN agent with 3 rule-based agents",
-            "agent_types": ["madqn", "rule", "rule", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config F - All MADQN",
-            "description": "All 4 agents using MADQN",
-            "agent_types": ["madqn", "madqn", "madqn", "madqn"],
-            "rule_strategy": "competitor_match"
-        },
-        
-        # New QMIX configurations
-        {
-            "name": "Config G - One QMIX",
-            "description": "1 QMIX agent with 3 rule-based agents",
-            "agent_types": ["qmix", "rule", "rule", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config H - All QMIX",
-            "description": "All 4 agents using QMIX",
-            "agent_types": ["qmix", "qmix", "qmix", "qmix"],
-            "rule_strategy": "competitor_match"
-        },
-        
-        # Mixed RL configurations
-        {
-            "name": "Config I - RL Competition",
-            "description": "MADDPG vs MADQN vs QMIX vs Rule-Based",
-            "agent_types": ["maddpg", "madqn", "qmix", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        
-        # Baseline configurations
-        {
-            "name": "Config J - All Rule-Based",
-            "description": "All 4 agents using rule-based strategy",
-            "agent_types": ["rule", "rule", "rule", "rule"],
-            "rule_strategy": "competitor_match"
-        },
-        {
-            "name": "Config K - All Random",
-            "description": "All 4 agents using random pricing",
-            "agent_types": ["random", "random", "random", "random"],
-            "rule_strategy": "competitor_match"
-        }
-    ]
+    {
+        "name": "Config A - All Rule-Based",
+        "description": "All 4 agents using rule-based strategy",
+        "agent_types": ["rule", "rule", "rule", "rule"],
+        "rule_strategies": ["competitor_match", "historical_anchor", "demand_responsive", "seasonal_pricing"]
+    },
+    {
+        "name": "Config B - All MADDPG",
+        "description": "All 4 agents using MADDPG",
+        "agent_types": ["maddpg", "maddpg", "maddpg", "maddpg"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config C - All QMIX",
+        "description": "All 4 agents using QMIX",
+        "agent_types": ["qmix", "qmix", "qmix", "qmix"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config D - One MADDPG",
+        "description": "1 MADDPG agent with 3 rule-based agents",
+        "agent_types": ["maddpg", "rule", "rule", "rule"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config E - MADDPG vs QMIX",
+        "description": "Mixed MARL setup: 2 MADDPG agents, 2 QMIX agents",
+        "agent_types": ["maddpg", "maddpg", "qmix", "qmix"],
+        "rule_strategy": "competitor_match"
+    }
+]
     
     # Create experiment results directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -111,9 +66,12 @@ def run_experiment_batch():
         
         try:
             # Run the simulation with this configuration
+            rule_strategies = config.get("rule_strategies")
+            
             episode_returns, metrics = run_experiment(
                 config["agent_types"],
-                config["rule_strategy"],
+                config.get("rule_strategy", "competitor_match"),
+                rule_strategies=rule_strategies,
                 weeks=104,       # Adjust as needed
                 episodes=20,     # Adjust as needed
                 save_dir=config_dir
@@ -156,7 +114,8 @@ def run_experiment_batch():
     
     return all_results, results_dir
 
-def run_experiment(agent_types, rule_strategy, weeks=52, episodes=5, save_dir=None):
+def run_experiment(agent_types, rule_strategy="competitor_match", 
+                  rule_strategies=None, weeks=52, episodes=5, save_dir=None):
     """Run a single experiment with specified agent configuration"""
     
     from simulate import run_simulation
@@ -169,6 +128,7 @@ def run_experiment(agent_types, rule_strategy, weeks=52, episodes=5, save_dir=No
         agent_type="custom",  # We'll handle agent creation in the modified function
         agent_types=agent_types,
         rule_strategy=rule_strategy,
+        rule_strategies=rule_strategies,
         save_dir=save_dir
     )
 
