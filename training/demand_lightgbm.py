@@ -381,6 +381,8 @@ print(f"📚 Train: {len(X_train)}, Test: {len(X_test)}")
 # Just use all features if the specific feature selection is causing issues
 X_train_selected = X_train
 X_test_selected = X_test
+print("\nShow one data row used as a base:")
+print(X_test_selected.iloc[0])  # Show one data row used as a base
 print(f"📋 Using all {X_train.shape[1]} features without selection")
 
 print("✅ Feature selection completed")
