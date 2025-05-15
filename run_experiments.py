@@ -73,7 +73,7 @@ def run_experiment_batch():
                 config.get("rule_strategy", "competitor_match"),
                 rule_strategies=rule_strategies,
                 weeks=104,       # Adjust as needed
-                episodes=20,     # Adjust as needed
+                episodes=10,     # Adjust as needed
                 save_dir=config_dir
             )
             
@@ -119,18 +119,31 @@ def run_experiment(agent_types, rule_strategy="competitor_match",
     """Run a single experiment with specified agent configuration"""
     
     from simulate import run_simulation
+    from evaluation.eval_metrics import generate_evaluation_plots
     
-    # Modify the run_simulation function to handle our agent_types configuration
-    return run_simulation(
+    # Run the simulation as before
+    episode_returns, metrics, price_df = run_simulation(
         weeks=weeks,
         episodes=episodes,
         num_agents=len(agent_types),
-        agent_type="custom",  # We'll handle agent creation in the modified function
+        agent_type="custom",
         agent_types=agent_types,
         rule_strategy=rule_strategy,
         rule_strategies=rule_strategies,
-        save_dir=save_dir
+        save_dir=save_dir,
+        return_price_df=True  # Add this parameter to return price data
     )
+    
+    # Generate the new evaluation plots
+    if save_dir and price_df is not None:
+        additional_metrics = generate_evaluation_plots(price_df, episode_returns, save_dir)
+        
+        # Merge the additional metrics into the existing metrics
+        if metrics is None:
+            metrics = {}
+        metrics.update(additional_metrics)
+    
+    return episode_returns, metrics
 
 def create_comparative_visuals(all_results, results_dir):
     """Create comparative visualizations across configurations"""

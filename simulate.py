@@ -30,7 +30,7 @@ import numpy as np
 
 def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg", 
                   agent_types=None, rule_strategy="competitor_match", 
-                  rule_strategies=None, save_dir=None):
+                  rule_strategies=None, save_dir=None, return_price_df=False):
     """Run multiple episodes of simulation for learning"""
     print("Starting simulation...")
     # Track agent learning performance across episodes
@@ -318,32 +318,42 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
             price_df = pd.DataFrame(price_tracking)
             changes_df = pd.DataFrame(price_changes)
             
+            # Create continuous week numbers across years
+            price_df['ContinuousWeek'] = price_df['Week'] + (price_df['Year'] - price_df['Year'].min()) * 52
+            
             # Plot revenue over time
             plt.figure(figsize=(12, 6))
             for agent_id in episode_returns.keys():
                 agent_data = results_df[results_df['Agent'] == agent_id]
-                weekly_revenue = agent_data.groupby(['Week', 'Year'])['Revenue'].sum().reset_index()
-                plt.plot(range(len(weekly_revenue)), weekly_revenue['Revenue'], label=agent_id)
+                # Calculate continuous week number
+                agent_data['ContinuousWeek'] = agent_data['Week'] + (agent_data['Year'] - agent_data['Year'].min()) * 52
+                weekly_revenue = agent_data.groupby('ContinuousWeek')['Revenue'].sum().reset_index()
+                plt.plot(weekly_revenue['ContinuousWeek'], weekly_revenue['Revenue'], label=agent_id)
             
             plt.xlabel('Week')
             plt.ylabel('Revenue')
             plt.title(f'Weekly Revenue by Agent (Episode {episode+1})')
             plt.legend()
             plt.grid(True, alpha=0.3)
+            plt.xlim(0, 104)  # Set x-axis to span full 104 weeks
+            plt.xticks(np.arange(0, 105, 13))  # Quarters
             if save_dir:
                 plt.savefig(f"{save_dir}/simulation_results_revenue_ep{episode+1}.png")
             else:
                 plt.savefig(f"simulation_results_revenue_ep{episode+1}.png")
+            
             # Plot price competition for products in the same category
             plt.figure(figsize=(12, 6))
             price_columns = [col for col in price_df.columns if 'Price' in col]
             for column in price_columns:
-                plt.plot(price_df['Week'], price_df[column], label=column)
+                plt.plot(price_df['ContinuousWeek'], price_df[column], label=column)
             plt.xlabel('Week')
             plt.ylabel('Price')
             plt.title(f'Price Competition (Episode {episode+1})')
             plt.legend()
             plt.grid(True, alpha=0.3)
+            plt.xlim(0, 104)  # Set x-axis to span full 104 weeks
+            plt.xticks(np.arange(0, 105, 13))  # Quarters
             if save_dir:
                 plt.savefig(f"{save_dir}/simulation_results_prices_ep{episode+1}.png")
             else:
@@ -369,22 +379,21 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
             plt.figure(figsize=(14, 6))
             # Filter for significant changes
             significant = changes_df[abs(changes_df['PriceChange']) > 2.0]
-            
-            for agent_id in changes_df['Agent'].unique():
+
+            # Create a continuous week number across multiple years
+            significant['ContinuousWeek'] = significant['Week'] + (significant['Year'] - significant['Year'].min()) * 52
+
+            for agent_id in significant['Agent'].unique():
                 agent_data = significant[significant['Agent'] == agent_id]
-                plt.scatter(agent_data['Week'], agent_data['PriceChange'], 
+                plt.scatter(agent_data['ContinuousWeek'], agent_data['PriceChange'], 
                             alpha=0.7, s=30, label=agent_id)
-            
+
             plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
-            plt.xlabel('Week')
+            plt.xlabel('Week (Continuous)')
             plt.ylabel('Price Change (%)')
             plt.title('Significant Price Changes (>2%)')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            if save_dir:
-                plt.savefig(f"{save_dir}/significant_price_changes_ep{episode+1}.png")
-            else:
-                plt.savefig(f"significant_price_changes_ep{episode+1}.png")
             
             # If all agents are rule-based with different strategies, add a specialized comparison
             if all(agent_type == "rule" for agent_type in (agent_types if agent_types else ["rule"] * num_agents)) and rule_strategies and len(set(rule_strategies)) > 1:
@@ -596,7 +605,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
             plt.savefig("maddpg_learning_metrics.png")
         print("Saved MADDPG learning metrics visualization to maddpg_learning_metrics.png")
     
-    return episode_returns, final_metrics
+    if return_price_df:
+        return episode_returns, final_metrics, price_df
+    else:
+        return episode_returns, final_metrics
 
 if __name__ == "__main__":
     # Only need to set agent_type for the first agent, others will be rule-based

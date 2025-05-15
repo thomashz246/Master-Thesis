@@ -1,12 +1,14 @@
 #!/bin/bash
-#SBATCH --partition=rome        # Use 'rome' partition which has available nodes
-#SBATCH --gpus=0               # No GPU needed
-#SBATCH --job-name=RunExperiments # More descriptive job name
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4      # Reduced from 9 since your sim is single-threaded
-#SBATCH --time=10:00:00        # Reduced time based on likely duration
-#SBATCH --output=logs/%j.log   # Same log location
-#SBATCH --mem=8G               # Explicitly request memory
+#SBATCH --partition=rome        # Use 'rome' partition (user-specific)
+#SBATCH --gpus=0               # No GPU needed, as specified
+#SBATCH --job-name=PricingExperimentsBatch # Descriptive job name
+#SBATCH --ntasks=1             # Your script runs experiments sequentially
+#SBATCH --cpus-per-task=8      # Increased CPUs for data processing and plotting
+#SBATCH --time=24:00:00        # Increased time for 104 weeks, 10 episodes, 5 configs
+#SBATCH --output=logs/exp_batch_%j.log   # Organized log file
+#SBATCH --mem=16G              # Increased memory for larger data & complex plots
+#SBATCH --mail-type=END,FAIL   # Optional: Get email notifications
+#SBATCH --mail-user=your.email@example.com # Optional: Replace with your email
 
 # Load modules
 module purge
@@ -14,13 +16,17 @@ module load 2023
 module load Anaconda3/2023.07-2
 
 # Activate your conda environment
-source activate myenv
+source activate myenv # Ensure 'myenv' has all necessary packages
 
-# Install required packages
-pip install --user wrapt numpy h5py tensorboard keras-preprocessing requests
+# Install/ensure required Python packages
+# Added pandas, matplotlib, seaborn for data handling and plotting
+pip install --user wrapt numpy h5py tensorboard keras-preprocessing requests pandas matplotlib seaborn
 
-# Go to the directory where simulate.py is located (fixed path)
+# Go to the directory where run_experiments.py is located
 cd $HOME/thesis/Online\ Retail/
 
-# Launch Python code with optimization flags
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+# Launch Python code with optimization flag
 srun python -O run_experiments.py
