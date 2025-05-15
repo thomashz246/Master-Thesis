@@ -331,12 +331,12 @@ class MADQNAgent(PricingAgent):
             import traceback
             traceback.print_exc()
     
-    def save(self, path='madqn_models'):
+    def save(self, path='models/madqn_models'):
         """Save the trained model"""
         os.makedirs(path, exist_ok=True)
         self.q_network.save_weights(f"{path}/qnetwork_{self.agent_id}.weights.h5")
         
-    def load(self, path='madqn_models'):
+    def load(self, path='models/madqn_models'):
         """Load trained model"""
         try:
             self.q_network.load_weights(f"{path}/qnetwork_{self.agent_id}.weights.h5")

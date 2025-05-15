@@ -198,6 +198,64 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('monthly_price_trends.png')
 
+# Calculate price volatility (coefficient of variation) for each product
+print("\n===== Price Volatility Analysis =====")
+# Group by product and calculate price coefficient of variation (CV)
+price_cv = df.groupby('StockCode')['Price'].apply(lambda x: x.std()/x.mean() if x.mean() > 0 else 0)
+average_cv = price_cv.mean()
+products_high_cv = price_cv[price_cv > 2.0].count()
+products_high_cv_pct = (products_high_cv / len(price_cv)) * 100
+
+print(f"Average CV across products: {average_cv:.2f}")
+print(f"Products with CV > 2.0: {products_high_cv} ({products_high_cv_pct:.1f}% of products)")
+# Plot distribution of CV values
+plt.figure(figsize=(20, 10))
+plt.hist(price_cv.clip(0, 2.1), bins=30, color='blue', alpha=0.7)
+plt.axvline(x=average_cv, color='red', linestyle='--', linewidth=2.5, label=f'Mean CV: {average_cv:.2f}')
+plt.title('Distribution of Price Coefficient of Variation (CV)', fontsize=30)
+plt.xlabel('Coefficient of Variation (CV = σ/μ)', fontsize=30)
+plt.ylabel('Number of Products', fontsize=30)
+plt.legend(fontsize=20)
+plt.grid(True, alpha=0.3)
+plt.xticks(fontsize=22)
+plt.yticks(fontsize=22)
+plt.tight_layout()
+plt.savefig('price_volatility_distribution.png')
+
+# Find top products with highest price volatility
+top_volatile_products = price_cv.sort_values(ascending=False).head(10)
+volatile_df = pd.DataFrame({'CV': top_volatile_products}).join(
+    df.groupby('StockCode')['Description'].first()
+)
+print("\n===== Products with Highest Price Volatility =====")
+print(volatile_df)
+
+print("\n===== Products with Highest Price Volatility =====")
+print(volatile_df)
+
+# Add dataset summary
+print("\n===== DATASET SUMMARY =====")
+dataset_summary = {
+    'Total records': len(df),
+    'Unique products': df['StockCode'].nunique(),
+    'Unique customers': df['Customer ID'].nunique(),
+    'Time span': f"{pd.to_datetime(df['InvoiceDate']).min().date()} to {pd.to_datetime(df['InvoiceDate']).max().date()}",
+    'Number of months': df['Month'].nunique(),
+    'Mean price (registered)': df[df['HasCustomerID']]['Price'].mean(),
+    'Mean price (non-registered)': df[~df['HasCustomerID']]['Price'].mean(),
+    'Average price difference': f"{overall_pct_diff:.1f}%",
+    'Average price volatility (CV)': f"{average_cv:.2f}",
+    'Products with CV > 2.0 (%)': f"{products_high_cv_pct:.1f}%"
+}
+
+for key, value in dataset_summary.items():
+    print(f"{key}: {value}")
+
+# Optionally save summary to file
+with open('dataset_summary.txt', 'w') as f:
+    for key, value in dataset_summary.items():
+        f.write(f"{key}: {value}\n")
+
 # Add some additional insights based on the data we've seen
 print("\n===== KEY INSIGHTS =====")
 print(f"1. Across all products, non-registered customers pay {category_diff['PriceDiff'].mean():.1f}% more on average")
@@ -205,3 +263,4 @@ print(f"2. MUG category has the highest price difference at {category_diff.loc['
 print(f"3. The price difference is most pronounced for smaller quantities ({qty_price_data.iloc[0,0]/qty_price_data.iloc[0,1]-1:.1%} higher)")
 print(f"4. The price gap has {'increased' if monthly_diff['Ratio'].iloc[-1] > monthly_diff['Ratio'].iloc[0] else 'decreased'} over time")
 print(f"5. Month with highest price difference: {monthly_diff['Ratio'].idxmax()} ({monthly_diff['Ratio'].max():.2f}x)")
+print(f"6. Price instability (CV) averages {average_cv:.2f} across products, with {products_high_cv_pct:.1f}% of products showing extreme volatility (CV > 2.0)")

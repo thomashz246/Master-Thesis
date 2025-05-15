@@ -481,7 +481,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
         print("Price stability calculated successfully")
         
         print("Calculating optimality gap...")
-        opt_gap = revenue_optimality_gap(episode_returns)
+        opt_gap = revenue_optimality_gap(episode_returns, window=5)
         print("Optimality gap calculated successfully")
         
         print("Calculating price-revenue elasticity...")
@@ -600,7 +600,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
 
 if __name__ == "__main__":
     # Only need to set agent_type for the first agent, others will be rule-based
-    agent_type = "maddpg"
+    agent_type = "madqn"
     # This will be used for all rule-based agents
     rule_strategy = "competitor_match"  # Other options: "static_markup", "historical_anchor", "demand_responsive", "seasonal_pricing"
     

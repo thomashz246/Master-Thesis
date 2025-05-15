@@ -27,18 +27,14 @@ class CriticNetwork(tf.keras.Model):
     """Centralized Critic for MADDPG"""
     def __init__(self, state_dim, action_dim, num_agents=4, name='critic'):
         super(CriticNetwork, self).__init__(name=name)
-        self.state_fc = layers.Dense(128, activation='relu',
-                                kernel_regularizer=tf.keras.regularizers.l2(0.001))
-        self.action_fc = layers.Dense(64, activation='relu',
-                                 kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.state_fc = layers.Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.action_fc = layers.Dense(64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.concat = layers.Concatenate()
         # Add layer normalization for better gradient flow
         self.norm1 = layers.LayerNormalization()
-        self.fc1 = layers.Dense(256, activation='relu',
-                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.fc1 = layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.norm2 = layers.LayerNormalization()
-        self.fc2 = layers.Dense(128, activation='relu',
-                           kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.fc2 = layers.Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.out = layers.Dense(1)
         
     def call(self, all_states, all_actions):
@@ -549,14 +545,14 @@ class MADDPGAgent(PricingAgent):
         
         return new_price
     
-    def save(self, path='maddpg_models'):
+    def save(self, path='models/maddpg_models'):
         """Save the trained models"""
         os.makedirs(path, exist_ok=True)
         # Fix: Add .weights.h5 suffix as required by Keras
         self.actor.save_weights(f"{path}/actor_{self.agent_id}.weights.h5")
         self.critic.save_weights(f"{path}/critic_{self.agent_id}.weights.h5")
         
-    def load(self, path='maddpg_models'):
+    def load(self, path='models/maddpg_models'):
         """Load trained models"""
         try:
             # Fix: Update load paths to match the new format

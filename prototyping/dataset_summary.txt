@@ -1,0 +1,10 @@
+Total records: 1061278
+Unique products: 5243
+Unique customers: 5876
+Time span: 2009-12-01 to 2011-12-09
+Number of months: 25
+Mean price (registered): 2.9669673639392355
+Mean price (non-registered): 4.6181356066020625
+Average price difference: 55.7%
+Average price volatility (CV): 0.39
+Products with CV > 2.0 (%): 0.2%

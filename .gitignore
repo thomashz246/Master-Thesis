@@ -8,6 +8,3 @@ logs/
 .env
 *.ipynb_checkpoints/
 experiment_results/
-qmix_models/
-maddpg_models/
-madq_models/

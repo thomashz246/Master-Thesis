@@ -494,7 +494,7 @@ class QMIXAgent(PricingAgent):
             import traceback
             traceback.print_exc()
     
-    def save(self, path='qmix_models'):
+    def save(self, path='models/qmix_models'):
         """Save the trained model"""
         os.makedirs(path, exist_ok=True)
         
@@ -506,7 +506,7 @@ class QMIXAgent(PricingAgent):
         # Save mixer network
         self.mixer.save_weights(f"{path}/{self.agent_id}_mixer.weights.h5")
         
-    def load(self, path='qmix_models'):
+    def load(self, path='models/qmix_models'):
         """Load trained model"""
         try:
             # Load individual product networks
