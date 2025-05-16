@@ -101,10 +101,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                     maddpg_agent = MADDPGAgent(
                         f"Agent{i+1}", 
                         product_portfolios[i],
-                        actor_lr=0.0001,  # Reduced from 0.0005
-                        critic_lr=0.00001,  # Reduced from 0.0001
-                        discount_factor=0.95,  # Slightly reduced
-                        tau=0.001,   # Slower target updates
+                        actor_lr=0.0001,
+                        critic_lr=0.0005,  # Changed: e.g., 0.0005 or 0.0001
+                        discount_factor=0.95,
+                        tau=0.001,
                         exploration_noise=max(0.1, 0.3 * np.exp(-episode/15)),
                     )
                     # Enable debugging/tracking for this agent

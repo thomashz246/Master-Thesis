@@ -25,19 +25,37 @@ def run_experiment_batch():
         "rule_strategy": "competitor_match"
     },
     {
-        "name": "Config C - All QMIX",
+        "name": "Config C - All MADQN",
+        "description": "All 4 agents using MADQN",
+        "agent_types": ["madqn", "madqn", "madqn", "madqn"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config D - MADDPG vs MADQN",
+        "description": "Mixed MARL setup: 2 MADDPG agents, 2 MADQN agents",
+        "agent_types": ["maddpg", "maddpg", "madqn", "madqn"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config E - MADQN vs Rule-Based",
+        "description": "1 MADQN agent with 3 rule-based agents",
+        "agent_types": ["madqn", "rule", "rule", "rule"],
+        "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config F - All QMIX",
         "description": "All 4 agents using QMIX",
         "agent_types": ["qmix", "qmix", "qmix", "qmix"],
         "rule_strategy": "competitor_match"
     },
     {
-        "name": "Config D - One MADDPG",
+        "name": "Config G - One MADDPG",
         "description": "1 MADDPG agent with 3 rule-based agents",
         "agent_types": ["maddpg", "rule", "rule", "rule"],
         "rule_strategy": "competitor_match"
     },
     {
-        "name": "Config E - MADDPG vs QMIX",
+        "name": "Config H - MADDPG vs QMIX",
         "description": "Mixed MARL setup: 2 MADDPG agents, 2 QMIX agents",
         "agent_types": ["maddpg", "maddpg", "qmix", "qmix"],
         "rule_strategy": "competitor_match"
@@ -105,6 +123,25 @@ def run_experiment_batch():
             traceback.print_exc()
             print("Moving to next configuration...")
     
+    # Create a consolidated returns dataset across all configs and episodes
+    all_returns_data = []
+    for config_name, result in all_results.items():
+        config_key = config_name.split(" - ")[0]
+        for agent_id, returns in result["returns"].items():
+            for episode_idx, return_val in enumerate(returns):
+                all_returns_data.append({
+                    "Configuration": config_name,
+                    "ConfigKey": config_key,
+                    "Agent": agent_id,
+                    "Episode": episode_idx + 1,
+                    "Return": return_val
+                })
+    
+    if all_returns_data:
+        all_returns_df = pd.DataFrame(all_returns_data)
+        all_returns_df.to_csv(f"{results_dir}/all_returns_by_episode.csv", index=False)
+        print(f"Saved all returns data to {results_dir}/all_returns_by_episode.csv")
+    
     # Generate comparative visualizations
     try:
         create_comparative_visuals(all_results, results_dir)
@@ -143,10 +180,57 @@ def run_experiment(agent_types, rule_strategy="competitor_match",
             metrics = {}
         metrics.update(additional_metrics)
     
+    # Save detailed time series data
+    if save_dir:
+        # Save returns per episode as time series
+        episode_returns_df = pd.DataFrame(episode_returns)
+        episode_returns_df.to_csv(f"{save_dir}/episode_returns.csv")
+        
+        # If available, save market shares evolution
+        if metrics and 'market_shares' in metrics:
+            market_shares = metrics['market_shares']
+            market_shares_df = pd.DataFrame({
+                agent_id: shares for agent_id, shares in market_shares.items()
+            })
+            market_shares_df.to_csv(f"{save_dir}/market_shares_evolution.csv")
+        
+        # If available, save fairness evolution
+        if metrics and 'fairness_over_time' in metrics:
+            fairness_df = pd.DataFrame({
+                'Episode': range(1, len(metrics['fairness_over_time']) + 1),
+                'Fairness_Index': metrics['fairness_over_time']
+            })
+            fairness_df.to_csv(f"{save_dir}/fairness_evolution.csv")
+        
+        # Save the full price dataframe for detailed analysis
+        if price_df is not None:
+            price_df.to_csv(f"{save_dir}/price_evolution.csv")
+            
+            # Also create a summary of price stats by episode
+            price_stats = []
+            for episode in price_df['Episode'].unique():
+                episode_data = price_df[price_df['Episode'] == episode]
+                for agent_product in episode_data.columns:
+                    if agent_product not in ['Week', 'Episode']:
+                        price_series = episode_data[agent_product].dropna()
+                        if not price_series.empty:
+                            price_stats.append({
+                                'Episode': episode,
+                                'AgentProduct': agent_product,
+                                'Mean': price_series.mean(),
+                                'Min': price_series.min(),
+                                'Max': price_series.max(),
+                                'StdDev': price_series.std(),
+                                'CoeffVar': price_series.std() / price_series.mean() if price_series.mean() != 0 else None
+                            })
+            
+            if price_stats:
+                pd.DataFrame(price_stats).to_csv(f"{save_dir}/price_statistics.csv", index=False)
+    
     return episode_returns, metrics
 
 def create_comparative_visuals(all_results, results_dir):
-    """Create comparative visualizations across configurations"""
+    """Create comparative visualizations across configurations and save all metrics to CSV"""
     
     # Compare final episode performance
     plt.figure(figsize=(12, 8))
@@ -304,6 +388,55 @@ def create_comparative_visuals(all_results, results_dir):
         plt.grid(axis='y', alpha=0.3)
         plt.tight_layout()
         plt.savefig(f"{results_dir}/stacked_returns_per_agent_type.png")
+    
+    # Save ALL metrics in a comprehensive DataFrame
+    all_metrics_rows = []
+    
+    for config_name, result in all_results.items():
+        if "metrics" in result and result["metrics"]:
+            config_key = config_name.split(" - ")[0]
+            base_row = {"Configuration": config_name, "ConfigKey": config_key}
+            
+            # Add final return values by agent
+            for agent_id, returns in result["returns"].items():
+                if returns:
+                    base_row[f"FinalReturn_{agent_id}"] = returns[-1]
+            
+            # Add all metrics (both top-level and nested)
+            for metric_name, value in result["metrics"].items():
+                if isinstance(value, dict):
+                    for sub_metric_name, sub_value in value.items():
+                        # Create a unique key for sub-metrics
+                        base_row[f"{metric_name}_{sub_metric_name}"] = sub_value
+                else:
+                    base_row[metric_name] = value
+            
+            all_metrics_rows.append(base_row)
+    
+    if all_metrics_rows:
+        # Create comprehensive DataFrame with all metrics for all configurations
+        comprehensive_metrics_df = pd.DataFrame(all_metrics_rows)
+        
+        # Save to CSV
+        comprehensive_metrics_df.to_csv(f"{results_dir}/all_configurations_metrics.csv", index=False)
+        print(f"Saved comprehensive metrics to {results_dir}/all_configurations_metrics.csv")
+        
+        # Also save a pivot table with metrics by configuration for easier analysis
+        # This creates a table with configurations as rows and metrics as columns
+        pivot_metrics = pd.DataFrame(index=[row["ConfigKey"] for row in all_metrics_rows])
+        
+        # For each possible metric column, create a pivot column
+        all_metric_cols = set()
+        for row in all_metrics_rows:
+            all_metric_cols.update(key for key in row.keys() if key not in ["Configuration", "ConfigKey"])
+            
+        for metric_col in all_metric_cols:
+            for row in all_metrics_rows:
+                if metric_col in row:
+                    pivot_metrics.loc[row["ConfigKey"], metric_col] = row[metric_col]
+        
+        pivot_metrics.to_csv(f"{results_dir}/pivot_metrics_by_config.csv")
+        print(f"Saved pivoted metrics to {results_dir}/pivot_metrics_by_config.csv")
     
     # Create a summary report
     with open(f"{results_dir}/experiment_summary.txt", "w") as f:

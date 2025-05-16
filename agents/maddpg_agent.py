@@ -130,7 +130,7 @@ class MADDPGAgent(PricingAgent):
         self._initialize_networks()
         
         # Debug tracking
-        self.debug_mode = False
+        self.debug_mode = True
         self.actor_losses = []
         self.critic_losses = []
         self.actions_before_noise = []
@@ -268,37 +268,24 @@ class MADDPGAgent(PricingAgent):
         # Extract state from market observations if available
         if market_observations:
             # Create state representation
-            # FIXING THE METHOD NAME HERE - was create_state_representation
             state = self.get_state_representation(list(self.products.keys())[0], market_observations)
             
             # Get action from neural network
-            action = self.get_action(state)
+            action = self.get_action(state) # This method adds noise
             
             # Apply action to product pricing
             for product_name, product in self.products.items():
                 self.set_price(product_name, self.scale_action_to_price(action[0], product))
             
-            # Store experience in replay buffer if we have previous state
-            if hasattr(self, 'previous_state') and self.previous_state is not None:
-                # Calculate reward as revenue increase
-                previous_revenue = sum(self.revenue_history[-2:-1]) if len(self.revenue_history) > 1 else 0
-                current_revenue = self.revenue_history[-1] if self.revenue_history else 0
-                reward = current_revenue - previous_revenue
-                
-                # Store experience: (state, action, reward, next_state, done)
-                self.buffer.add(self.previous_state, self.previous_action, reward, state, False)
-                
-                # Now learn from experiences
-                self.learn_from_experiences()
-            
-            # Update previous state/action for next step
+            # Update previous_state and previous_action for the coordinator to use
+            # The coordinator will handle experience storage and learning.
             self.previous_state = state
-            self.previous_action = action
+            self.previous_action = action # This is the noisy, clipped action
         else:
             # Default behavior if no market observations
             for product_name, product in self.products.items():
                 current_price = product.price
-                # Default pricing logic
+                # Potentially set a default or hold price
     
     def get_action(self, state):
         """Get action from actor network and add exploration noise"""
@@ -306,15 +293,15 @@ class MADDPGAgent(PricingAgent):
         state_batch = np.expand_dims(state, axis=0).astype(np.float32)
         
         # Get deterministic action from policy
-        action = self.actor(state_batch).numpy()[0]
+        action_deterministic = self.actor(state_batch).numpy()[0]
         
         # Track actions before noise if in debug mode
         if self.debug_mode:
-            self.actions_before_noise.append(float(action[0]))
+            self.actions_before_noise.append(float(action_deterministic[0]))
         
         # Add exploration noise
         noise = np.random.normal(0, self.exploration_noise, size=self.action_dim)
-        noisy_action = action + noise
+        noisy_action = action_deterministic + noise
         
         # Clip action to [-1, 1]
         clipped_action = np.clip(noisy_action, -1.0, 1.0)
@@ -323,82 +310,23 @@ class MADDPGAgent(PricingAgent):
         if self.debug_mode:
             self.actions_after_noise.append(float(clipped_action[0]))
         
-        return clipped_action
+        return clipped_action # Return the noisy, clipped action
 
     def learn_from_experiences(self):
-        """Learn from batch of experiences using MADDPG algorithm"""
+        """
+        This method should NOT be called if the agent is part of a MADDPGCoordinator setup.
+        Learning is handled by learn_from_joint_experience() via the coordinator.
+        You can leave this method for potential standalone DDPG agent use,
+        but ensure it's not called from act() in a MADDPG context.
+        """
         # Only learn if we have enough samples
-        if self.buffer.size() < self.batch_size:
+        if self.buffer.size() < self.batch_size: # self.buffer is the agent's local buffer
             return
         
-        try:
-            # Sample batch of experiences
-            states, actions, rewards, next_states, dones = self.buffer.sample(self.batch_size)
-            
-            # Convert to tensors
-            states = tf.convert_to_tensor(states, dtype=tf.float32)
-            actions = tf.convert_to_tensor(actions, dtype=tf.float32)
-            rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-            next_states = tf.convert_to_tensor(next_states, dtype=tf.float32)
-            dones = tf.convert_to_tensor(dones, dtype=tf.float32)
-            
-            # Since we don't have access to other agents' states/actions in this implementation,
-            # We'll use a simplified version that works with the local observations
-            
-            # Update critic network
-            with tf.GradientTape() as tape:
-                # Get target actions from target actor network
-                target_actions = self.target_actor(next_states)
-                
-                # Get target Q value using target networks
-                target_q_values = self.target_critic(next_states, target_actions)
-                
-                # Compute TD targets
-                targets = rewards + self.discount_factor * (1 - dones) * target_q_values
-                
-                # Compute current Q values
-                q_values = self.critic(states, actions)
-                
-                # Mean squared TD error
-                critic_loss = tf.reduce_mean(tf.square(targets - q_values))
-            
-            # Update critic
-            critic_gradients = tape.gradient(critic_loss, self.critic.trainable_variables)
-            self.critic_optimizer.apply_gradients(zip(critic_gradients, self.critic.trainable_variables))
-            
-            # Update actor using policy gradient
-            with tf.GradientTape() as tape:
-                # Get actions from current actor network
-                predicted_actions = self.actor(states)
-                
-                # Calculate loss (maximize Q value)
-                actor_loss = -tf.reduce_mean(self.critic(states, predicted_actions))
-            
-            actor_gradients = tape.gradient(actor_loss, self.actor.trainable_variables)
-            self.actor_optimizer.apply_gradients(zip(actor_gradients, self.actor.trainable_variables))
-            
-            # Update target networks
-            self.update_target_networks()
-            
-            # Record losses if in debug mode
-            if self.debug_mode:
-                self.actor_losses.append(float(actor_loss))
-                self.critic_losses.append(float(critic_loss))
-                
-                # Print learning progress periodically
-                if len(self.actor_losses) % 10 == 0:  # Every 10 updates
-                    print(f"\nTraining step {len(self.actor_losses)}:")
-                    print(f"  Actor Loss: {float(actor_loss):.6f}")
-                    print(f"  Critic Loss: {float(critic_loss):.6f}")
-                    print(f"  Current exploration noise: {self.exploration_noise:.3f}")
-                    if len(self.actions_before_noise) > 0 and len(self.actions_after_noise) > 0:
-                        print(f"  Recent action (before noise): {self.actions_before_noise[-1]:.3f}")
-                        print(f"  Recent action (after noise): {self.actions_after_noise[-1]:.3f}")
-        
-        except Exception as e:
-            print(f"ERROR in learn_from_experiences(): {e}")
-            import traceback
-            traceback.print_exc()
+        # ... (rest of the original learn_from_experiences code) ...
+        # IMPORTANT: If this function is removed or not called, the exploration noise decay
+        # self.exploration_noise = max(self.min_noise, self.exploration_noise * self.noise_decay)
+        # must solely rely on its presence in learn_from_joint_experience.
     
     def learn_from_joint_experience(self, joint_states, joint_actions, own_reward, joint_next_states, dones, all_agents):
         """Learn using joint states/actions from all agents"""
@@ -429,16 +357,14 @@ class MADDPGAgent(PricingAgent):
             
             # Train critic - with gradient clipping and checking
             with tf.GradientTape() as tape:
-                # Get target Q value (with clipping)
+                # Get target Q value
                 target_q = self.target_critic(joint_next_states_tensor, joint_next_actions_flat)
-                target_q = tf.clip_by_value(target_q, -10.0, 10.0)  # Clip to reasonable range
                 
                 # Compute target using Bellman equation
                 y = own_reward_tensor + self.discount_factor * (1 - dones_tensor) * target_q
                 
-                # Compute critic loss (with clipping)
+                # Compute critic loss
                 q_value = self.critic(joint_states_tensor, joint_actions_tensor)
-                q_value = tf.clip_by_value(q_value, -10.0, 10.0)  # Clip to reasonable range
                 critic_loss = tf.reduce_mean(tf.square(y - q_value))
             
             # Apply critic gradients with error handling
@@ -491,6 +417,9 @@ class MADDPGAgent(PricingAgent):
             if self.debug_mode:
                 self.actor_losses.append(float(actor_loss))
                 self.critic_losses.append(float(critic_loss))
+        
+            # Decay exploration noise
+            self.exploration_noise = max(self.min_noise, self.exploration_noise * self.noise_decay)
         
         except Exception as e:
             print(f"Error in learn_from_joint_experience for {self.agent_id}: {e}")
