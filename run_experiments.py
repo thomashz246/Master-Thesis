@@ -9,7 +9,7 @@ from scipy import stats  # For statistical testing
 from simulate import run_simulation
 import traceback
 
-def run_experiment_batch():
+def run_experiment_batch(enable_shocks=True):
     """Run all experimental configurations and save results"""
     
     # Define the experimental configurations
@@ -61,6 +61,12 @@ def run_experiment_batch():
         "description": "Mixed MARL setup: 2 MADDPG agents, 2 QMIX agents",
         "agent_types": ["maddpg", "maddpg", "qmix", "qmix"],
         "rule_strategy": "competitor_match"
+    },
+    {
+        "name": "Config I - MADDPG vs QMIX vs MADQN vs Rule-Based",
+        "description": "Mixed MARL setup: 1 MADDPG, 1 MADQN, 1 QMIX, 1 Rule-Based",
+        "agent_types": ["maddpg", "madqn", "qmix", "rule"],
+        "rule_strategy": "competitor_match"
     }
 ]
     
@@ -92,9 +98,10 @@ def run_experiment_batch():
                 config["agent_types"],
                 config.get("rule_strategy", "competitor_match"),
                 rule_strategies=rule_strategies,
-                weeks=52,
-                episodes=3,
-                save_dir=config_dir
+                weeks=104,
+                episodes=20,
+                save_dir=config_dir,
+                enable_shocks=enable_shocks  # Pass the enable_shocks parameter
             )
             
             # IMMEDIATELY save results after successful run
@@ -161,14 +168,17 @@ def run_experiment_batch():
     return all_results, results_dir
 
 def run_experiment(agent_types, rule_strategy="competitor_match", 
-                  rule_strategies=None, weeks=52, episodes=5, save_dir=None):
+                  rule_strategies=None, weeks=52, episodes=5, save_dir=None,
+                  enable_shocks=True):
     """Run a single experiment with specified agent configuration"""
     
     try:
         from simulate import run_simulation
         from evaluation.eval_metrics import generate_evaluation_plots
+        from evaluation.market_shock_analysis import analyze_market_shocks
         
         print(f"Starting experiment with agent types: {agent_types}")
+        print(f"Market shocks enabled: {enable_shocks}")
         
         # Run the simulation as before
         episode_returns, metrics, price_df = run_simulation(
@@ -180,7 +190,8 @@ def run_experiment(agent_types, rule_strategy="competitor_match",
             rule_strategy=rule_strategy,
             rule_strategies=rule_strategies,
             save_dir=save_dir,
-            return_price_df=True  # Add this parameter to return price data
+            return_price_df=True,  # Add this parameter to return price data
+            enable_shocks=enable_shocks  # Pass the enable_shocks parameter
         )
         
         print(f"Simulation completed successfully")
@@ -205,6 +216,25 @@ def run_experiment(agent_types, rule_strategy="competitor_match",
                 metrics = {}
             metrics.update(additional_metrics)
             metrics["adaptability"] = adaptability_metrics
+            
+            # Calculate shock response metrics
+            shock_response_metrics = analyze_market_shocks(
+                price_df, 
+                episode_returns, 
+                save_dir, 
+                enable_shocks=enable_shocks
+            )
+            
+            # Add to the existing metrics
+            metrics["shock_response"] = shock_response_metrics
+            
+            # Print summary of shock response
+            print("Shock response metrics:")
+            for metric, values in shock_response_metrics.items():
+                if isinstance(values, dict):
+                    print(f"  {metric}: {values}")
+                else:
+                    print(f"  {metric}: {values}")
         
         # Save detailed time series data
         if save_dir:
@@ -657,10 +687,18 @@ if __name__ == "__main__":
         import numpy as np
         import traceback
         import matplotlib.pyplot as plt
+        import argparse
+        
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(description='Run retail pricing experiments')
+        parser.add_argument('--no-shocks', dest='enable_shocks', action='store_false',
+                           help='Disable market shocks in simulation')
+        parser.set_defaults(enable_shocks=True)
+        args = parser.parse_args()
         
         # Run all experiments with improved error handling
-        print("Starting experiment batch...")
-        results, output_dir = run_experiment_batch()
+        print(f"Starting experiment batch (Market shocks: {'ENABLED' if args.enable_shocks else 'DISABLED'})...")
+        results, output_dir = run_experiment_batch(enable_shocks=args.enable_shocks)
         print(f"\nAll experiments completed. Results saved to {output_dir}")
         
     except Exception as e:

@@ -133,8 +133,6 @@ class MarketEnv:
     
     def step(self):
         """Execute one step of the market simulation"""
-        # print(f"MarketEnv.step(): Week {self.current_week}, Year {self.current_year}")
-        
         try:
             # Store demand predictions for all products from all agents
             all_demands = {}
@@ -145,6 +143,14 @@ class MarketEnv:
             
             # First, get all market observations to share with agents
             market_observations = self.get_market_observations()
+            
+            # Check if current week is a shock week
+            shock_multiplier = 1.0
+            if hasattr(self, 'enable_shocks') and self.enable_shocks:
+                shock_weeks = [26, 52, 78]  # Shock at weeks 26, 52, and 78
+                if self.current_week in shock_weeks:
+                    print(f"🌊 MARKET SHOCK at Week {self.current_week}: Demand decreased by 30%")
+                    shock_multiplier = 0.7  # 30% decrease
             
             # For each agent, predict demand and calculate profit
             for agent in self.agents:
@@ -171,7 +177,7 @@ class MarketEnv:
                     }
                     
                     # Predict demand with competitive price effects
-                    predicted_demand = self.predict_demand(features, competing_products)
+                    predicted_demand = self.predict_demand(features, competing_products) * shock_multiplier
                     agent_demands[product_name] = predicted_demand
                     
                     # Calculate profit

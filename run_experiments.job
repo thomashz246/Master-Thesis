@@ -29,4 +29,4 @@ cd $HOME/thesis/Online\ Retail/
 mkdir -p logs
 
 # Launch Python code with optimization flag
-srun python -O run_experiments.py
+srun python -O run_experiments.py --no-shocks

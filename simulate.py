@@ -30,9 +30,11 @@ import numpy as np
 
 def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg", 
                   agent_types=None, rule_strategy="competitor_match", 
-                  rule_strategies=None, save_dir=None, return_price_df=False):
+                  rule_strategies=None, save_dir=None, return_price_df=False,
+                  enable_shocks=True):
     """Run multiple episodes of simulation for learning"""
     print("Starting simulation...")
+    print(f"Market shocks: {'ENABLED' if enable_shocks else 'DISABLED'}")
     # Track agent learning performance across episodes
     episode_returns = {f'Agent{i}': [] for i in range(1, num_agents+1)}
     
@@ -180,6 +182,7 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
         print("Initializing market environment...")
         model_path = os.path.join(os.path.dirname(__file__), "models/lgbm_model.pkl")
         market = MarketEnv(agents=agents, model_path=model_path)
+        market.enable_shocks = enable_shocks  # Add this line
         
         # Run simulation
         print(f"Starting simulation for {weeks} weeks")
