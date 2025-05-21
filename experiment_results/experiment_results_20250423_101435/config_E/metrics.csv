@@ -1,8 +1,0 @@
-,Agent1_PremiumA1_Price,Agent1_PremiumA2_Price,Agent1_PremiumA3_Price,Agent1_PremiumA4_Price,Agent1_LuxuryA5_Price,Agent2_PremiumA1_Price,Agent2_PremiumA2_Price,Agent2_PremiumA3_Price,Agent2_PremiumA4_Price,Agent2_LuxuryA5_Price,Agent3_PremiumA1_Price,Agent3_PremiumA2_Price,Agent3_PremiumA3_Price,Agent3_PremiumA4_Price,Agent3_LuxuryA5_Price,Agent4_PremiumA1_Price,Agent4_PremiumA2_Price,Agent4_PremiumA3_Price,Agent4_PremiumA4_Price,Agent4_LuxuryA5_Price,Agent1,Agent2,Agent3,Agent4,nash_overall,Agent1_revenue_share,Agent2_revenue_share,Agent3_revenue_share,Agent4_revenue_share,price_coefficient_variation,price_convergence,total_revenue,gini_coefficient,fairness,social_welfare
-price_stability,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,0.9999268268635108,,,,,,,,,,,,,,,
-nash_equilibrium,,,,,,,,,,,,,,,,,,,,,1.0,1.0,1.0,1.0,,,,,,,,,,,
-overall,,,,,,,,,,,,,,,,,,,,,,,,,1.0,,,,,,,,,,
-optimality_gap,,,,,,,,,,,,,,,,,,,,,0.0,0.0,0.0,0.0,,,,,,,,,,,
-price_revenue_elasticity,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-global_vs_individual,,,,,,,,,,,,,,,,,,,,,,,,,,0.25,0.25,0.25,0.25,0.0,1.0,,,,
-social_welfare,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,16318.86894511816,0.0,1.0,16318.86894511816
