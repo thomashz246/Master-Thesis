@@ -36,6 +36,9 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
     # Track agent learning performance across episodes
     episode_returns = {f'Agent{i}': [] for i in range(1, num_agents+1)}
     
+    # To collect price data across all episodes
+    all_price_data = []
+    
     # Use agent_types configuration if provided
     if agent_types and agent_type == "custom":
         print(f"Using custom agent configuration: {agent_types}")
@@ -263,7 +266,8 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                 # Track prices for competing products
                 price_data = {
                     'Week': market.current_week,
-                    'Year': market.current_year
+                    'Year': market.current_year,
+                    'Episode': episode + 1  # Add episode information to price data
                 }
                 for agent in agents:
                     for product_name, product in agent.products.items():
@@ -428,6 +432,10 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
                     plt.savefig(f"{save_dir}/rule_strategy_comparison_ep{episode+1}.png")
                 else:
                     plt.savefig(f"rule_strategy_comparison_ep{episode+1}.png")
+    
+        # After finishing weekly simulation, add this episode's price data to the all_price_data list
+        all_episode_prices = pd.DataFrame(price_tracking)
+        all_price_data.append(all_episode_prices)
     
     # Save the trained models - don't attempt to save RandomPricingAgent
     if agent_type in ["maddpg", "madqn", "qmix"]:
@@ -605,28 +613,26 @@ def run_simulation(weeks=52, episodes=3, num_agents=4, agent_type="maddpg",
             plt.savefig("maddpg_learning_metrics.png")
         print("Saved MADDPG learning metrics visualization to maddpg_learning_metrics.png")
     
-    if return_price_df:
-        return episode_returns, final_metrics, price_df
+    # Combine price data from all episodes before returning
+    if return_price_df and all_price_data:
+        combined_price_df = pd.concat(all_price_data, ignore_index=True)
+        return episode_returns, final_metrics, combined_price_df
     else:
         return episode_returns, final_metrics
 
 if __name__ == "__main__":
-    # Only need to set agent_type for the first agent, others will be rule-based
-    agent_type = "madqn"
-    # This will be used for all rule-based agents
-    rule_strategy = "competitor_match"  # Other options: "static_markup", "historical_anchor", "demand_responsive", "seasonal_pricing"
-    
     try:
-        episode_returns, metrics = run_simulation(weeks=104, episodes=15, num_agents=4, agent_type=agent_type)
-        print("\nSimulation complete!")
-        print("\nTotal revenue by episode:")
-        for episode in range(len(episode_returns['Agent1'])):
-            print(f"Episode {episode+1}: ", end="")
-            for agent_id in episode_returns.keys():
-                print(f"{agent_id}: ${episode_returns[agent_id][episode]:.2f} ", end="")
-            print()
+        # Run a simple simulation with default parameters
+        episode_returns, metrics = run_simulation(weeks=52, episodes=3)
         
-        # Print metrics after simulation - only place where metrics are printed
+        # Print final results
+        episode = 2  # Index of the final episode (0-based)
+        print(f"Final Episode Results: ", end="")
+        for agent_id in episode_returns.keys():
+            print(f"{agent_id}: ${episode_returns[agent_id][episode]:.2f} ", end="")
+        print()
+            
+        # Print metrics after simulation
         print("\nConvergence & Optimality Metrics:")
         if metrics:
             for metric_name, values in metrics.items():
@@ -640,4 +646,5 @@ if __name__ == "__main__":
             print("No metrics were calculated successfully.")
     except Exception as e:
         print("\nCRITICAL ERROR in main execution:")
+        import traceback
         traceback.print_exc()
