@@ -1,57 +1,149 @@
 # Data files
+## Raw and processed data
 data/
+datasets/
 *.csv
 *.xlsx
 *.xls
 *.json
+*.parquet
+*.pickle
+*.feather
+*.arrow
+*.db
+*.sqlite
+*.sqlite3
 
-# Generated models
+# Model files
+## Model weights and checkpoints
 *.pkl
 *.h5
 *.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
 models/
 trained_models/
+checkpoints/
 
-# Results and outputs
+# Results and experiment outputs
+## All experiment outputs
 experiment_results/
 outputs/
-figures/
 results/
+runs/
+figures/
 plots/
 images/
+visualizations/
+thumbnails/
+videos/
+charts/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pdf
 
-# Cache and temp files
+# Cache and temporary files
+## System and IDE caches
 __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 *.pyc
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.dll
+*.class
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.tox/
+.nox/
 
 # Logs
+## Log files and directories
 logs/
 *.log
 tensorboard/
+wandb/
+ray_results/
+mlruns/
 
 # Environment and configuration
+## Virtual environments and local config
 .env
+.env.*
 venv/
 env/
+.venv/
+.python-version
+.conda/
+anaconda/
+miniconda/
+.local/
+config.local.yaml
 
 # IDE files
+## Editor-specific files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-*
+.atom/
+.project
+.spyderproject
+.spyproject
+.ropeproject
+.vimrc
 
-# Exclude prototyping, but keep a few examples
+# Build files
+## Build artifacts and documentation
+build/
+dist/
+*.egg-info/
+_build/
+docs/_build/
+site/
+.eggs/
+
+# Exclude prototyping and exploration
+## Exclude exploratory work except for examples
 prototyping/*
 !prototyping/README.md
 !prototyping/example_script.py
+EDA/
+exploratory/
+notebooks/*
+!notebooks/README.md
+!notebooks/example_notebook.ipynb
 
-# Job submission scripts (keep only templates)
+# Job submission scripts
+## Only keep templates
 *.job
 !template.job
+*.sh
+!example.sh
 
-# Keep README and key documentation
+# Keep essential files
+## Documentation and requirements
 !README.md
 !LICENSE
 !requirements.txt
+!environment.yml
+!setup.py
+!CITATION.cff
+!paper.md
+
+# Documentation
+## Exclude generated docs
+docs/build/
+docs/_build/
+docs/auto_examples/
