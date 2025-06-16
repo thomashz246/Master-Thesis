@@ -53,6 +53,11 @@ charts/
 images/
 results/
 uml/
+**/images/
+**/results/
+**/uml/
+**/EDA/
+
 
 # Cache and temporary files
 ## System and IDE caches
