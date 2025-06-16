@@ -1,5 +1,4 @@
 # Data files
-## Raw and processed data
 data/
 datasets/
 *.csv
@@ -15,7 +14,6 @@ datasets/
 *.sqlite3
 
 # Model files
-## Model weights and checkpoints
 *.pkl
 *.h5
 *.pt
@@ -28,7 +26,6 @@ trained_models/
 checkpoints/
 
 # Results and experiment outputs
-## All experiment outputs
 experiment_results/
 outputs/
 results/
@@ -40,13 +37,22 @@ visualizations/
 thumbnails/
 videos/
 charts/
-EDA/
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.svg
 *.pdf
+
+/images/
+/images/**
+/results/
+/results/**
+/uml/
+/uml/**
+images/
+results/
+uml/
 
 # Cache and temporary files
 ## System and IDE caches
@@ -92,7 +98,6 @@ miniconda/
 config.local.yaml
 
 # IDE files
-## Editor-specific files
 .vscode/
 .idea/
 *.swp
@@ -106,7 +111,6 @@ config.local.yaml
 .vimrc
 
 # Build files
-## Build artifacts and documentation
 build/
 dist/
 *.egg-info/
@@ -116,10 +120,11 @@ site/
 .eggs/
 
 # Exclude prototyping and exploration
-## Exclude exploratory work except for examples
 prototyping/*
 !prototyping/README.md
 !prototyping/example_script.py
+/EDA/
+/EDA/**
 EDA/
 exploratory/
 notebooks/*
@@ -127,14 +132,10 @@ notebooks/*
 !notebooks/example_notebook.ipynb
 
 # Job submission scripts
-## Only keep templates
 *.job
 !template.job
 *.sh
 !example.sh
-
-# Keep essential files
-## Documentation and requirements
 !README.md
 !LICENSE
 !requirements.txt
@@ -143,8 +144,6 @@ notebooks/*
 !CITATION.cff
 !paper.md
 
-# Documentation
-## Exclude generated docs
 docs/build/
 docs/_build/
 docs/auto_examples/
