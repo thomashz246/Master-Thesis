@@ -40,6 +40,7 @@ visualizations/
 thumbnails/
 videos/
 charts/
+EDA/
 *.png
 *.jpg
 *.jpeg
