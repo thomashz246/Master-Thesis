@@ -1,46 +1,81 @@
-# Master-Thesis
+# Multi-Agent Reinforcement Learning for Dynamic Pricing in Online Retail
 
-## Online Retail Dynamic Pricing Simulation
-### Overview
-This project implements a multi-agent reinforcement learning framework for dynamic pricing in an online retail environment. It simulates a marketplace where multiple retail agents compete by adjusting their product prices to maximize revenue while responding to market conditions and competitor behaviors.
+## Overview
 
-The simulation uses two types of reinforcement learning algorithms:
+This repository contains the full implementation of a multi-agent reinforcement learning (MARL) framework for dynamic pricing in ERP-integrated online retail environments. The research investigates how different MARL strategies adapt to demand fluctuations, competitor behavior, and market shocks, with a focus on revenue optimization, fairness, and price stability.
 
-### MADDPG (Multi-Agent Deep Deterministic Policy Gradient): A deep reinforcement learning approach using actor-critic networks
-### Q-Learning: A more traditional reinforcement learning method using state-action value tables
+The simulation framework is built around realistic demand modeling and custom agent-environment interactions. It enables controlled experimentation with heterogeneous agent populations under configurable market conditions.
 
-### Key Features
-- Multi-Agent Environment: Simulates multiple retail agents competing in the same market
-- Dynamic Pricing Strategy: Agents can adjust prices based on market observations
-- Market Demand Model: Uses a trained ML model to predict demand based on price and other features
-- Seasonality Effects: Incorporates weekly and holiday seasonality effects
-- Performance Visualization: Creates plots of revenue, price competition, and learning progress
+## Research Questions
 
-### Configuration Options
-The simulation can be configured by modifying parameters in `simulate.py`:
-`weeks`: Number of weeks to simulate in each episode (default: 52)
-`episodes`: Number of episodes to run for training (default: 50)
-`num_agents`: Number of competing agents (default: 4)
-`use_maddpg`: Use MADDPG (True) or Q-learning (False)
+This project explores the following research questions:
 
-#### Agent Parameters
-**MADDPG Agent**
-- `actor_lr`: Learning rate for actor network (0.0005)
-- `critic_lr`: Learning rate for critic network (0.001)
-- `discount_factor`: Future reward discount factor (0.98)
-- `tau`: Target network update parameter (0.005)
-- `exploration_noise`: Exploration noise magnitude (decayed exponentially)
+1. **Pricing Effectiveness**: How do MARL agents compare to rule-based strategies in competitive retail markets in terms of revenue and adaptability?
+2. **Adaptation to Change**: How do MARL agents respond to market shocks, such as sudden changes in demand or competition?
+3. **Emergent Dynamics**: What market behaviors arise when different agent types (learning-based and rule-based) interact in shared environments?
 
-**Q-Learning Agent**
-- `learning_rate`: Learning rate (0.05)
-- `exploration_rate`: Exploration rate (decayed linearly with episodes)
-- `discount_factor`: Future reward discount factor (0.9-0.98)
+## Framework Architecture
 
-#### Demand Model
-The demand prediction uses a LightGBM model trained on historical retail data. Features include:
+The simulation environment models a multi-agent pricing scenario with:
 
-- Product price
-- Competitor prices
-- Week of year
-- Holiday periods
-- Historical demand (lag features)
+- Multiple agents selling competing or substitute products
+- Weekly demand cycles influenced by product price, seasonality, and agent behavior
+- Market shocks (optional) that alter demand elasticity or volume mid-simulation
+- Centralized logging of agent decisions, market outcomes, and performance metrics
+
+### Agent Types
+
+- **MADDPG** – Multi-Agent Deep Deterministic Policy Gradient  
+  Continuous pricing, centralized training, decentralized execution  
+- **MADQN** – Multi-Agent Deep Q-Network  
+  Discrete pricing, decentralized learning  
+- **QMIX** – Centralized value factorization for coordinated multi-agent learning  
+- **Rule-Based Agents**, including:  
+  - Fixed markup / static pricing  
+  - Competitor-matching  
+  - Demand-forecast responsive  
+  - Seasonal indexing  
+
+Each agent interacts with the environment through a defined interface, receives individualized observations, and learns policies to optimize revenue.
+
+## Demand Modeling
+
+- **Dataset**: Online Retail II from the UCI repository (filtered for B2B transactions)
+- **Model**: LightGBM regression trained to predict weekly demand per product
+- **Features**:
+  - Lag-based sales trends
+  - Price, time, and semantic product clusters (via S-BERT + KMeans)
+  - Calendar effects (week of year, holiday flags)
+  - Price positioning relative to category and historical context
+
+## Evaluation Metrics
+
+The framework includes built-in metrics for economic and strategic performance:
+
+- Cumulative revenue  
+- Nash equilibrium proximity  
+- Price volatility and convergence  
+- Fairness (Gini, Jain’s Index)  
+- Social welfare (adjusted revenue × fairness)  
+- Adjustment frequency and magnitude  
+- Market share evolution  
+
+## Key Findings
+
+- **MARL agents outperform** rule-based agents in most revenue scenarios, especially under volatile demand.
+- **MADDPG is most robust** to market shocks, but QMIX achieves better coordination in homogeneous setups.
+- **Heterogeneous agent mixes** lead to diverse strategic equilibria and varying levels of fairness.
+- **MARL agents exploit inelastic demand** in the dataset, underscoring the need for realistic elasticity modeling in future work.
+
+## Repository Structure
+
+```plaintext
+agents/           # Agent classes (MADDPG, MADQN, QMIX, Rule-Based)
+env/              # Retail market simulation environment
+evaluation/       # Custom evaluation metrics and performance scripts
+training/         # Demand model training (LightGBM, XGBoost, CatBoost)
+scripts/          # Product selection, image generation, utilities
+preprocess/       # Feature engineering scripts for demand modeling
+run_experiments.py  # Main entry point for running simulation experiments
+simulate.py         # Lower-level environment-agent interface
+requirements.txt    # All necessary Python dependencies
