@@ -153,6 +153,9 @@ def run_experiment_batch(enable_shocks=True):
         # Add algorithm pricing behavior comparison
         compare_algorithm_pricing_behavior(all_results, results_dir)
         
+        # Add revenue statistical analysis
+        statistical_results = analyze_agent_revenue_statistics(all_results, results_dir)
+        
         # Add statistical significance testing
         significance_results = test_adaptability_differences(all_results)
         if significance_results:
@@ -678,6 +681,120 @@ def process_price_df_for_analysis(price_df):
         
     return pd.DataFrame(processed_rows)
 
+def analyze_agent_revenue_statistics(all_results, results_dir):
+    """
+    Analyze revenues across agent types with statistical tests
+    Uses Wilcoxon rank test to compare revenues between different agent types
+    """
+    print("Analyzing agent revenue statistics with statistical tests...")
+    
+    # Collect revenues by agent type
+    agent_type_revenues = {}
+    
+    # Mapping from agent_id to agent type based on configuration
+    agent_type_mapping = {}
+    
+    # First, build a mapping of agents to their types across all configurations
+    for config_name, result in all_results.items():
+        # Skip configs with errors
+        if "error" in result.get("metrics", {}):
+            continue
+        
+        # Get the agent types from the configuration name
+        if "MADDPG" in config_name:
+            agent_type = "MADDPG"
+        elif "MADQN" in config_name:
+            agent_type = "MADQN"
+        elif "QMIX" in config_name:
+            agent_type = "QMIX"
+        elif "Rule-Based" in config_name:
+            agent_type = "Rule-Based"
+        else:
+            # Mixed configurations - need to look at the specific agent roles
+            # This would require configuration-specific mapping
+            # For now, we'll use the configuration key as the agent type
+            agent_type = config_name.split(" - ")[0]
+        
+        # Store all revenues from all episodes for this agent type
+        for agent_id, returns in result["returns"].items():
+            if agent_id not in agent_type_revenues:
+                agent_type_revenues[agent_id] = []
+            agent_type_revenues[agent_id].extend(returns)
+    
+    # Now perform statistical tests between all pairs of agent types
+    statistical_results = []
+    agent_types = list(set(agent_type_revenues.keys()))
+    
+    for i in range(len(agent_types)):
+        for j in range(i+1, len(agent_types)):
+            type1 = agent_types[i]
+            type2 = agent_types[j]
+            
+            # Perform Wilcoxon rank test
+            try:
+                revenues1 = agent_type_revenues[type1]
+                revenues2 = agent_type_revenues[type2]
+                
+                # Skip if not enough data
+                if len(revenues1) < 3 or len(revenues2) < 3:
+                    continue
+                
+                # Wilcoxon rank test
+                stat, p_value = stats.wilcoxon(revenues1, revenues2)
+                
+                statistical_results.append({
+                    'Agent Type 1': type1,
+                    'Agent Type 2': type2,
+                    'Mean Revenue 1': np.mean(revenues1),
+                    'Mean Revenue 2': np.mean(revenues2),
+                    'Wilcoxon Statistic': stat,
+                    'p-value': p_value,
+                    'Significant Difference': p_value < 0.05
+                })
+            except Exception as e:
+                print(f"Error in statistical test for {type1} vs {type2}: {e}")
+    
+    # Save results to CSV
+    if statistical_results:
+        results_df = pd.DataFrame(statistical_results)
+        results_df.to_csv(f"{results_dir}/agent_revenue_statistics.csv", index=False)
+        print(f"Saved agent revenue statistical comparison to {results_dir}/agent_revenue_statistics.csv")
+        
+        # Create visualization of statistical differences
+        plt.figure(figsize=(12, 8))
+        
+        # Plot mean revenues by agent type
+        agent_means = {agent: np.mean(revenues) for agent, revenues in agent_type_revenues.items()}
+        agents = list(agent_means.keys())
+        means = [agent_means[a] for a in agents]
+        
+        bars = plt.bar(agents, means, alpha=0.7)
+        
+        # Annotate significant differences
+        sig_pairs = [(r['Agent Type 1'], r['Agent Type 2']) 
+                    for r in statistical_results if r['Significant Difference']]
+        
+        # Add significance markers
+        y_max = max(means) * 1.1
+        y_step = max(means) * 0.05
+        for i, (a1, a2) in enumerate(sig_pairs):
+            idx1 = agents.index(a1)
+            idx2 = agents.index(a2)
+            x1, x2 = idx1, idx2
+            
+            # Draw significance line
+            plt.plot([x1, x2], [y_max + i*y_step, y_max + i*y_step], 'k-')
+            plt.text((x1 + x2) / 2, y_max + i*y_step, '*', ha='center', fontsize=16)
+        
+        plt.title('Mean Revenue by Agent Type with Statistical Significance')
+        plt.ylabel('Mean Revenue')
+        plt.xlabel('Agent Type')
+        plt.grid(True, alpha=0.3, axis='y')
+        plt.tight_layout()
+        plt.savefig(f"{results_dir}/agent_revenue_statistical_comparison.png")
+        plt.close()
+    
+    return statistical_results
 if __name__ == "__main__":
     try:
         # Import necessary modules that might be missed

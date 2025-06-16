@@ -1,10 +1,57 @@
+# Data files
+data/
+*.csv
+*.xlsx
+*.xls
+*.json
+
+# Generated models
 *.pkl
 *.h5
 *.pt
-__pycache__/
 models/
+trained_models/
+
+# Results and outputs
+experiment_results/
+outputs/
+figures/
+results/
+plots/
+images/
+
+# Cache and temp files
+__pycache__/
+.DS_Store
+.ipynb_checkpoints/
+*.pyc
+
+# Logs
 logs/
 *.log
+tensorboard/
+
+# Environment and configuration
 .env
-*.ipynb_checkpoints/
-experiment_results/
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude prototyping, but keep a few examples
+prototyping/*
+!prototyping/README.md
+!prototyping/example_script.py
+
+# Job submission scripts (keep only templates)
+*.job
+!template.job
+
+# Keep README and key documentation
+!README.md
+!LICENSE
+!requirements.txt
