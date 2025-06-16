@@ -12,6 +12,7 @@ datasets/
 *.db
 *.sqlite
 *.sqlite3
+*.job
 
 # Model files
 *.pkl
