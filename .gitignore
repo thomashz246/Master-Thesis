@@ -43,6 +43,8 @@ charts/
 *.gif
 *.svg
 *.pdf
+**/*.png
+
 
 /images/
 /images/**
