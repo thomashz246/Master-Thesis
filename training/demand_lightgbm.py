@@ -590,6 +590,16 @@ try:
 except Exception as e:
     print("⚠️ Could not calculate elasticity:", e)
 
+# Increase font sizes globally
+plt.rcParams.update({
+    'font.size': 14,
+    'axes.titlesize': 16,
+    'axes.labelsize': 14,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'legend.fontsize': 12
+})
+
 # Smooth the predicted quantity with a rolling average
 elasticity_df['Smoothed_Quantity'] = elasticity_df['Pred_Quantity'].rolling(window=5, center=True).mean()
 
@@ -598,10 +608,52 @@ plt.figure(figsize=(10, 6))
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
 plt.axvline(x=1.0, color='r', linestyle='--', label='Current Price')
-plt.xlabel('Price Multiplier')
-plt.ylabel('Predicted Quantity')
-plt.title('Price Sensitivity Analysis (Smoothed)')
-plt.legend()
+plt.xlabel('Price Multiplier', fontsize=14)
+plt.ylabel('Predicted Quantity', fontsize=14)
+plt.title('Price Sensitivity Analysis (Smoothed)', fontsize=16)
+plt.legend(loc='center right')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig("images/price_sensitivity_smoothed.png")
+print("📁 Smoothed price sensitivity analysis saved to price_sensitivity_smoothed.png")
+
+# Calculate the baseline (multiplier = 1.0) quantity
+baseline_idx = (elasticity_df['Price_Multiplier'] - 1.0).abs().idxmin()
+baseline_quantity = elasticity_df.loc[baseline_idx, 'Pred_Quantity']
+baseline_price_multiplier = elasticity_df.loc[baseline_idx, 'Price_Multiplier']
+
+print(f"Using baseline at price multiplier {baseline_price_multiplier:.4f} with quantity {baseline_quantity:.2f}")
+
+# Add quantity multiplier columns
+elasticity_df['Quantity_Multiplier'] = elasticity_df['Pred_Quantity'] / baseline_quantity
+elasticity_df['Smoothed_Quantity_Multiplier'] = elasticity_df['Smoothed_Quantity'] / baseline_quantity
+
+# Plot smoothed and raw curve with quantity multipliers
+plt.figure(figsize=(10, 6))
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Quantity_Multiplier'], 
+         marker='o', label='Raw')
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity_Multiplier'], 
+         color='orange', linewidth=2, label='Smoothed (rolling mean)')
+plt.axvline(x=baseline_price_multiplier, color='r', linestyle='--', label=f'Reference Price ({baseline_price_multiplier:.2f})')
+plt.axhline(y=1.0, color='r', linestyle=':', label='Reference Quantity')
+plt.xlabel('Price Multiplier', fontsize=14)
+plt.ylabel('Quantity Multiplier', fontsize=14)
+plt.title('Price Sensitivity Analysis (Normalized)', fontsize=16)
+plt.legend(loc='center right')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig("images/price_sensitivity_normalized.png")
+print("📁 Normalized price sensitivity analysis saved to price_sensitivity_normalized.png")
+
+# Original plot code (keep this if you want both versions)
+plt.figure(figsize=(10, 6))
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
+plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
+plt.axvline(x=1.0, color='r', linestyle='--', label='Current Price')
+plt.xlabel('Price Multiplier', fontsize=14)
+plt.ylabel('Predicted Quantity', fontsize=14)
+plt.title('Price Sensitivity Analysis (Smoothed)', fontsize=16)
+plt.legend(loc='center right')
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("images/price_sensitivity_smoothed.png")
@@ -743,11 +795,11 @@ else:
     plt.axvline(x=price_multipliers[max_revenue_idx], color='green', 
                 linestyle=':', label=f'Max Revenue Price (x{price_multipliers[max_revenue_idx]:.2f})')
     
-    plt.title(f'Price Sensitivity for Product {product_id}')
-    plt.xlabel('Price Multiplier')
-    plt.ylabel('Predicted Quantity / Scaled Revenue')
+    plt.title(f'Price Sensitivity for Product {product_id}', fontsize=16)
+    plt.xlabel('Price Multiplier', fontsize=14)
+    plt.ylabel('Predicted Quantity / Scaled Revenue', fontsize=14)
     plt.grid(True, alpha=0.3)
-    plt.legend()
+    plt.legend(loc='center right')
     
     plt.tight_layout()
     plt.savefig(f"product_elasticity/product_{product_id}_elasticity.png")
