@@ -603,38 +603,42 @@ plt.rcParams.update({
 # Smooth the predicted quantity with a rolling average
 elasticity_df['Smoothed_Quantity'] = elasticity_df['Pred_Quantity'].rolling(window=5, center=True).mean()
 
-# Plot smoothed and raw curve
-plt.figure(figsize=(10, 6))
-plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
-plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
-plt.axvline(x=1.0, color='r', linestyle='--', label='Current Price')
-plt.xlabel('Price Multiplier', fontsize=14)
-plt.ylabel('Predicted Quantity', fontsize=14)
-plt.title('Price Sensitivity Analysis (Smoothed)', fontsize=16)
-plt.legend(loc='center right')
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig("images/price_sensitivity_smoothed.png")
-print("📁 Smoothed price sensitivity analysis saved to price_sensitivity_smoothed.png")
+# Find the exact baseline at multiplier=1.0 by interpolation
+# First find the closest points around 1.0
+closest_idx = (elasticity_df['Price_Multiplier'] - 1.0).abs().idxmin()
+if elasticity_df.loc[closest_idx, 'Price_Multiplier'] < 1.0 and closest_idx < len(elasticity_df) - 1:
+    lower_idx, upper_idx = closest_idx, closest_idx + 1
+elif elasticity_df.loc[closest_idx, 'Price_Multiplier'] > 1.0 and closest_idx > 0:
+    lower_idx, upper_idx = closest_idx - 1, closest_idx
+else:
+    lower_idx = upper_idx = closest_idx  # Exact match found or at boundary
 
-# Calculate the baseline (multiplier = 1.0) quantity
-baseline_idx = (elasticity_df['Price_Multiplier'] - 1.0).abs().idxmin()
-baseline_quantity = elasticity_df.loc[baseline_idx, 'Pred_Quantity']
-baseline_price_multiplier = elasticity_df.loc[baseline_idx, 'Price_Multiplier']
+# Interpolate to get exact smoothed quantity at multiplier=1.0
+if lower_idx != upper_idx:
+    lower_price = elasticity_df.loc[lower_idx, 'Price_Multiplier']
+    upper_price = elasticity_df.loc[upper_idx, 'Price_Multiplier']
+    lower_qty = elasticity_df.loc[lower_idx, 'Smoothed_Quantity']
+    upper_qty = elasticity_df.loc[upper_idx, 'Smoothed_Quantity']
+    
+    # Linear interpolation
+    baseline_quantity = lower_qty + (upper_qty - lower_qty) * (1.0 - lower_price) / (upper_price - lower_price)
+else:
+    # Exact match or boundary case
+    baseline_quantity = elasticity_df.loc[closest_idx, 'Smoothed_Quantity']
 
-print(f"Using baseline at price multiplier {baseline_price_multiplier:.4f} with quantity {baseline_quantity:.2f}")
+print(f"Using reference point at price multiplier 1.0 with smoothed quantity {baseline_quantity:.2f}")
 
 # Add quantity multiplier columns
 elasticity_df['Quantity_Multiplier'] = elasticity_df['Pred_Quantity'] / baseline_quantity
 elasticity_df['Smoothed_Quantity_Multiplier'] = elasticity_df['Smoothed_Quantity'] / baseline_quantity
 
-# Plot smoothed and raw curve with quantity multipliers
+# Plot with quantity multipliers
 plt.figure(figsize=(10, 6))
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Quantity_Multiplier'], 
          marker='o', label='Raw')
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity_Multiplier'], 
          color='orange', linewidth=2, label='Smoothed (rolling mean)')
-plt.axvline(x=baseline_price_multiplier, color='r', linestyle='--', label=f'Reference Price ({baseline_price_multiplier:.2f})')
+plt.axvline(x=1.0, color='r', linestyle='--', label='Reference Price (1.00)')
 plt.axhline(y=1.0, color='r', linestyle=':', label='Reference Quantity')
 plt.xlabel('Price Multiplier', fontsize=14)
 plt.ylabel('Quantity Multiplier', fontsize=14)
@@ -645,11 +649,13 @@ plt.tight_layout()
 plt.savefig("images/price_sensitivity_normalized.png")
 print("📁 Normalized price sensitivity analysis saved to price_sensitivity_normalized.png")
 
-# Original plot code (keep this if you want both versions)
+# Original plot code with the same reference point
 plt.figure(figsize=(10, 6))
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
-plt.axvline(x=1.0, color='r', linestyle='--', label='Current Price')
+plt.axvline(x=1.0, color='r', linestyle='--', label='Reference Price (1.00)')
+# Add a horizontal line at the interpolated baseline quantity
+plt.axhline(y=baseline_quantity, color='r', linestyle=':', label='Reference Quantity')
 plt.xlabel('Price Multiplier', fontsize=14)
 plt.ylabel('Predicted Quantity', fontsize=14)
 plt.title('Price Sensitivity Analysis (Smoothed)', fontsize=16)
