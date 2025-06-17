@@ -4,7 +4,7 @@
 
 This repository contains the complete implementation of a simulation framework designed to benchmark multi-agent reinforcement learning (MARL) algorithms for dynamic pricing in ERP-integrated supply chains. It addresses the limitations of static pricing strategies used in current ERP systems by exploring how autonomous pricing agents can learn and adapt in complex, interdependent market environments.
 
-Despite ERP systems efficiently handling logistics, procurement, and financial planning, their pricing modules often rely on static rules or historical averages. These strategies fail to respond to real-time changes in demand, competition, and inventory levels—leading to suboptimal revenue, poor adaptability, and missed opportunities.
+Despite ERP systems efficiently handling logistics, procurement, and financial planning, their pricing modules often rely on static rules or historical averages. These strategies fail to respond to real-time changes in demand, competition, and inventory levels, leading to suboptimal revenue, poor adaptability, and missed opportunities.
 
 This project proposes and evaluates MARL-based pricing agents that learn in a shared environment shaped by competitor actions, demand patterns, and stochastic shocks. The environment simulates real-world market complexity based on actual retail data, enabling fine-grained comparisons between traditional pricing methods and learning-based approaches.
 
