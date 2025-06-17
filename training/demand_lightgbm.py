@@ -592,12 +592,12 @@ except Exception as e:
 
 # Increase font sizes globally
 plt.rcParams.update({
-    'font.size': 14,
-    'axes.titlesize': 16,
-    'axes.labelsize': 14,
-    'xtick.labelsize': 12,
-    'ytick.labelsize': 12,
-    'legend.fontsize': 12
+    'font.size': 22,
+    'axes.titlesize': 22,
+    'axes.labelsize': 20,
+    'xtick.labelsize': 18,
+    'ytick.labelsize': 18,
+    'legend.fontsize': 16
 })
 
 # Smooth the predicted quantity with a rolling average
@@ -637,13 +637,14 @@ plt.figure(figsize=(10, 6))
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Quantity_Multiplier'], 
          marker='o', label='Raw')
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity_Multiplier'], 
-         color='orange', linewidth=2, label='Smoothed (rolling mean)')
-plt.axvline(x=1.0, color='r', linestyle='--', label='Reference Price (1.00)')
-plt.axhline(y=1.0, color='r', linestyle=':', label='Reference Quantity')
-plt.xlabel('Price Multiplier', fontsize=14)
-plt.ylabel('Quantity Multiplier', fontsize=14)
-plt.title('Price Sensitivity Analysis (Normalized)', fontsize=16)
-plt.legend(loc='center right')
+         color='orange', linewidth=4, label='Smoothed (rolling mean)')
+# Add reference lines without including them in the legend
+plt.axvline(x=1.0, color='r', linestyle='--')
+plt.axhline(y=1.0, color='r', linestyle=':')
+plt.xlabel('Price Multiplier')
+plt.ylabel('Quantity Multiplier')
+plt.title('Price Sensitivity Analysis')
+plt.legend(loc='upper right')
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("images/price_sensitivity_normalized.png")
@@ -653,13 +654,13 @@ print("📁 Normalized price sensitivity analysis saved to price_sensitivity_nor
 plt.figure(figsize=(10, 6))
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Pred_Quantity'], marker='o', label='Raw')
 plt.plot(elasticity_df['Price_Multiplier'], elasticity_df['Smoothed_Quantity'], color='orange', linewidth=2, label='Smoothed (rolling mean)')
-plt.axvline(x=1.0, color='r', linestyle='--', label='Reference Price (1.00)')
-# Add a horizontal line at the interpolated baseline quantity
-plt.axhline(y=baseline_quantity, color='r', linestyle=':', label='Reference Quantity')
+# Add reference lines without including them in the legend
+plt.axvline(x=1.0, color='r', linestyle='--')
+plt.axhline(y=baseline_quantity, color='r', linestyle=':')
 plt.xlabel('Price Multiplier', fontsize=14)
 plt.ylabel('Predicted Quantity', fontsize=14)
 plt.title('Price Sensitivity Analysis (Smoothed)', fontsize=16)
-plt.legend(loc='center right')
+plt.legend(loc='upper right')
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("images/price_sensitivity_smoothed.png")
@@ -788,24 +789,25 @@ else:
     # Create plot
     plt.figure(figsize=(10, 6))
     plt.plot(price_multipliers, product_elasticities, marker='o', color='blue', label='Demand')
-    plt.axvline(x=1.0, color='red', linestyle='--', label='Current Price')
-    
+    # Reference line without legend entry
+    plt.axvline(x=1.0, color='red', linestyle='--')
+
     # Calculate and plot revenue curve
     revenues = [p * q for p, q in zip(price_values, product_elasticities)]
     revenue_scale = max(product_elasticities) / max(revenues)
     plt.plot(price_multipliers, [r * revenue_scale for r in revenues], 
              marker='s', color='green', label='Revenue (scaled)')
-    
+
     # Calculate the price that maximizes revenue
     max_revenue_idx = np.argmax(revenues)
     plt.axvline(x=price_multipliers[max_revenue_idx], color='green', 
                 linestyle=':', label=f'Max Revenue Price (x{price_multipliers[max_revenue_idx]:.2f})')
-    
+
     plt.title(f'Price Sensitivity for Product {product_id}', fontsize=16)
     plt.xlabel('Price Multiplier', fontsize=14)
     plt.ylabel('Predicted Quantity / Scaled Revenue', fontsize=14)
     plt.grid(True, alpha=0.3)
-    plt.legend(loc='center right')
+    plt.legend(loc='upper right')
     
     plt.tight_layout()
     plt.savefig(f"product_elasticity/product_{product_id}_elasticity.png")
