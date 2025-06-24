@@ -1,5 +1,5 @@
 """
-MADDPG (Multi-Agent Deep Deterministic Policy Gradient) implementation for retail pricing agents.
+MADDPGAgent:
 
 Classes:
 - ActorNetwork: Neural network for the policy function (state -> action)
