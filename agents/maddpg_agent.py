@@ -1,3 +1,22 @@
+"""
+MADDPG (Multi-Agent Deep Deterministic Policy Gradient) implementation for retail pricing agents.
+
+Classes:
+- ActorNetwork: Neural network for the policy function (state -> action)
+- CriticNetwork: Neural network for the value function (state+action -> Q-value)
+- ReplayBuffer: Experience memory with prioritized recent experience sampling
+- MADDPGAgent: Main agent class that inherits from PricingAgent
+
+MADDPGAgent:
+    - get_state_representation(): Converts market data into state vectors
+    - act(): Determines pricing actions based on market observations
+    - get_action(): Generates actions with exploration noise
+    - learn_from_joint_experience(): Updates networks using experiences from all agents
+    - set_price(): Applies smoothed price changes to products
+    - scale_action_to_price(): Converts normalized actions to actual price values
+    - save()/load(): Persistence methods for trained models
+"""
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, optimizers, losses
@@ -7,6 +26,7 @@ import sys, os
 from env.pricing_agent import PricingAgent
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 
 class ActorNetwork(tf.keras.Model):
     def __init__(self, state_dim, action_dim, name='actor'):
