@@ -63,4 +63,4 @@ class PricingAgent:
                     if market_product['agent_id'] != self.agent_id:
                         competing_products[product_name].append(market_product)
         
-        return
+        return competing_products

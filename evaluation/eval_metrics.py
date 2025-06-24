@@ -376,3 +376,4 @@ def generate_evaluation_plots(price_df, returns, results_dir):
         'fairness_over_time': fairness_over_time,
         'price_volatility': volatility,
         'strategic_diversity': diversity
+    }
