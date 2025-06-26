@@ -46,7 +46,6 @@ charts/
 *.pdf
 **/*.png
 
-
 /images/
 /images/**
 /results/
@@ -60,6 +59,7 @@ uml/
 **/results/
 **/uml/
 **/EDA/
+/training/
 
 
 # Cache and temporary files
