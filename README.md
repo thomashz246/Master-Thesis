@@ -88,7 +88,6 @@ The following metrics are used to evaluate agent performance:
 agents/             # MARL and rule-based agent implementations
 env/                # Custom multi-agent pricing environment
 evaluation/         # Metric logging and performance evaluation scripts
-training/           # Demand forecasting models and training scripts (LightGBM, etc.)
 preprocess/         # Feature engineering and data transformations
 scripts/            # Utility scripts for product selection and visualization
 run_experiments.py  # Main simulation runner for batch configurations
