@@ -75,8 +75,6 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('price_time_by_customer_type.png')
 
-# Let's also check if this pattern holds across all products
-print("\n===== Testing if pattern holds across all products =====")
 df['HasCustomerID'] = ~df['Customer ID'].isna()
 overall_price_diff = df.groupby('HasCustomerID')['Price'].agg(['mean', 'median', 'count'])
 print(overall_price_diff)
@@ -85,7 +83,6 @@ if False in overall_price_diff.index and True in overall_price_diff.index:
     overall_pct_diff = (overall_price_diff.loc[False, 'mean'] - overall_price_diff.loc[True, 'mean']) / overall_price_diff.loc[True, 'mean'] * 100
     print(f"Across ALL products, prices without Customer ID are {overall_pct_diff:.1f}% {'higher' if overall_pct_diff > 0 else 'lower'}")
 
-# Let's check the top 10 products with the biggest price difference
 product_price_by_id = df.groupby(['StockCode', 'HasCustomerID'])['Price'].mean().reset_index()
 product_price_pivot = product_price_by_id.pivot(index='StockCode', columns='HasCustomerID', values='Price')
 product_price_pivot.columns = ['WithoutID', 'WithID']
@@ -129,9 +126,7 @@ category_diff['PriceDiff'] = (category_diff[False] / category_diff[True] - 1) * 
 print("\n===== Category Price Differences =====")
 print(category_diff)
 
-# Plot category price differences - CORRECTED VERSION
 plt.figure(figsize=(12, 8))
-# Access MultiIndex columns by their names
 cat_plot_data = pd.DataFrame({
     'Without CustomerID': category_diff[False],
     'With CustomerID': category_diff[True]
@@ -156,9 +151,7 @@ plt.grid(True, axis='x', alpha=0.3)
 plt.tight_layout()
 plt.savefig('category_price_difference.png')
 
-# Plot quantity vs price analysis - CORRECTED VERSION
 plt.figure(figsize=(12, 8))
-# Create a better format for the quantity price data
 qty_price_data = pd.DataFrame({
     'Without CustomerID': price_by_id_qty.loc[False],
     'With CustomerID': price_by_id_qty.loc[True]
